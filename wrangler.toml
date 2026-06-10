@@ -1,0 +1,9 @@
+name = "flowday"
+compatibility_date = "2026-06-10"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flowday-db"
+database_id = "a1cf20cc-d615-4449-9722-cb870eb5c8e4"
+migrations_dir = "migrations"
