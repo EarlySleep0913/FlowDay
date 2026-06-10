@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BarChart3,
   CalendarDays,
@@ -26,9 +27,11 @@ import {
   RefreshCw,
   RotateCcw,
   Save,
+  Settings,
   Shield,
   Shirt,
   ShoppingBag,
+  SlidersHorizontal,
   Sparkles,
   Square,
   Star,
@@ -51,6 +54,20 @@ const TASK_COIN_REWARD = 20;
 const HABIT_COIN_REWARD = 12;
 const FOCUS_COIN_UNIT_SECONDS = 5 * 60;
 const FOCUS_COIN_REWARD = 8;
+const AVATAR_EFFECT_TYPES = ["standee", "pulse", "hop", "sparkle", "shake"];
+const DEFAULT_APPEARANCE = {
+  backgroundId: "theme",
+  backgroundBlur: 8,
+};
+const BACKGROUNDS = [
+  { id: "theme", name: "主题", image: null },
+  { id: "background-01", name: "背景 01", image: "/background/background-01.png" },
+  { id: "background-02", name: "背景 02", image: "/background/background-02.png" },
+  { id: "background-03", name: "背景 03", image: "/background/background-03.png" },
+  { id: "background-04", name: "背景 04", image: "/background/background-04.png" },
+  { id: "background-05", name: "背景 05", image: "/background/background-05.png" },
+  { id: "background-06", name: "背景 06", image: "/background/background-06.png" },
+];
 
 function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -166,6 +183,7 @@ function emptyState() {
       ownedSkinIds: [DEFAULT_SKIN_ID],
       equippedSkinId: DEFAULT_SKIN_ID,
     },
+    appearance: DEFAULT_APPEARANCE,
   };
 }
 
@@ -179,6 +197,15 @@ function normalizeState(rawState) {
   const equippedSkinId = ownedSkinIds.includes(raw.inventory?.equippedSkinId)
     ? raw.inventory.equippedSkinId
     : DEFAULT_SKIN_ID;
+  const backgroundIds = new Set(BACKGROUNDS.map((background) => background.id));
+  const rawAppearance = raw.appearance && typeof raw.appearance === "object" ? raw.appearance : {};
+  const backgroundId = backgroundIds.has(rawAppearance.backgroundId)
+    ? rawAppearance.backgroundId
+    : DEFAULT_APPEARANCE.backgroundId;
+  const backgroundBlur = Math.min(
+    30,
+    Math.max(0, Number(rawAppearance.backgroundBlur ?? DEFAULT_APPEARANCE.backgroundBlur) || 0)
+  );
 
   return {
     ...base,
@@ -199,6 +226,10 @@ function normalizeState(rawState) {
     inventory: {
       ownedSkinIds,
       equippedSkinId,
+    },
+    appearance: {
+      backgroundId,
+      backgroundBlur,
     },
   };
 }
@@ -322,6 +353,7 @@ function App() {
     role: "user",
   });
   const [rewardNotice, setRewardNotice] = useState(null);
+  const [backgroundPanelOpen, setBackgroundPanelOpen] = useState(false);
   const syncTimerRef = useRef(null);
 
   useEffect(() => {
@@ -437,6 +469,15 @@ function App() {
   const gameStats = useMemo(() => buildGameStats(state, todayKey()), [state]);
   const equippedSkin = getSkin(state.inventory?.equippedSkinId);
   const ownedSkinIds = state.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+  const appearance = { ...DEFAULT_APPEARANCE, ...(state.appearance || {}) };
+  const selectedBackground =
+    BACKGROUNDS.find((background) => background.id === appearance.backgroundId) || BACKGROUNDS[0];
+  const backgroundStyle = selectedBackground.image
+    ? {
+        "--custom-bg-image": `url(${selectedBackground.image})`,
+        "--custom-bg-blur": `${appearance.backgroundBlur}px`,
+      }
+    : undefined;
 
   function showRewardNotice(amount, reason) {
     const id = uid();
@@ -444,6 +485,17 @@ function App() {
     window.setTimeout(() => {
       setRewardNotice((notice) => (notice?.id === id ? null : notice));
     }, 1800);
+  }
+
+  function patchAppearance(patch) {
+    setState((current) => ({
+      ...current,
+      appearance: {
+        ...DEFAULT_APPEARANCE,
+        ...(current.appearance || {}),
+        ...patch,
+      },
+    }));
   }
 
   async function handleLogin(event) {
@@ -902,7 +954,12 @@ function App() {
   }
 
   return (
-    <main className="app-shell" onPointerMove={handleSpotlightMove}>
+    <main
+      className={`app-shell ${selectedBackground.image ? "has-custom-bg" : ""}`}
+      style={backgroundStyle}
+      onPointerMove={handleSpotlightMove}
+    >
+      {selectedBackground.image && <div className="app-background" aria-hidden="true" />}
       <ClickSpark />
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
@@ -924,8 +981,8 @@ function App() {
 
       <header className="topbar glass">
         <div>
-          <p className="eyebrow">FlowDay</p>
-          <h1>任务、习惯和专注时间都在一个地方</h1>
+          <p className="brand-mark">FlowDay</p>
+          <h1>把每一天，修炼成喜欢的自己</h1>
         </div>
         <div className="topbar-pills">
           <div className="date-pill">
@@ -936,6 +993,13 @@ function App() {
             <Coins size={18} />
             <span>{state.wallet?.coins || 0} 金币</span>
           </div>
+          <BackgroundSettings
+            open={backgroundPanelOpen}
+            setOpen={setBackgroundPanelOpen}
+            appearance={appearance}
+            selectedBackground={selectedBackground}
+            patchAppearance={patchAppearance}
+          />
         </div>
       </header>
 
@@ -1321,6 +1385,65 @@ function App() {
   );
 }
 
+function BackgroundSettings({ open, setOpen, appearance, selectedBackground, patchAppearance }) {
+  const popover = (
+    <section className="background-popover glass">
+      <div className="background-popover-title">
+        <div>
+          <p className="eyebrow">背景</p>
+          <strong>{selectedBackground.name}</strong>
+        </div>
+        <SlidersHorizontal size={18} />
+      </div>
+
+      <div className="background-options">
+        {BACKGROUNDS.map((background) => (
+          <button
+            className={`background-swatch ${appearance.backgroundId === background.id ? "active" : ""} ${
+              background.image ? "" : "theme-swatch"
+            }`}
+            key={background.id}
+            onClick={() => patchAppearance({ backgroundId: background.id })}
+            style={background.image ? { backgroundImage: `url(${background.image})` } : undefined}
+            type="button"
+            aria-label={background.name}
+            title={background.name}
+          >
+            <span>{background.image ? background.name.replace("背景 ", "") : "主题"}</span>
+          </button>
+        ))}
+      </div>
+
+      <label className="background-blur">
+        <span>模糊度 {appearance.backgroundBlur}px</span>
+        <input
+          type="range"
+          min="0"
+          max="30"
+          value={appearance.backgroundBlur}
+          onChange={(event) => patchAppearance({ backgroundBlur: Number(event.target.value) })}
+          disabled={!selectedBackground.image}
+        />
+      </label>
+    </section>
+  );
+
+  return (
+    <div className="background-control">
+      <button
+        className="icon-button background-trigger"
+        onClick={() => setOpen((value) => !value)}
+        aria-label="背景设置"
+        type="button"
+      >
+        <Settings size={18} />
+      </button>
+
+      {open && createPortal(popover, document.body)}
+    </div>
+  );
+}
+
 function TabButton({ icon: Icon, label, active, onClick }) {
   return (
     <button className={active ? "active" : ""} onClick={onClick}>
@@ -1345,11 +1468,31 @@ function EmptyState({ text }) {
 }
 
 function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, setActiveView }) {
+  const [avatarEffectKey, setAvatarEffectKey] = useState("");
+  const [avatarEffectType, setAvatarEffectType] = useState("standee");
+  const avatarEffectTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => window.clearTimeout(avatarEffectTimerRef.current);
+  }, []);
+
+  function triggerAvatarEffect() {
+    const effectId = uid();
+    const effectType = AVATAR_EFFECT_TYPES[Math.floor(Math.random() * AVATAR_EFFECT_TYPES.length)];
+    window.clearTimeout(avatarEffectTimerRef.current);
+    setAvatarEffectKey(effectId);
+    setAvatarEffectType(effectType);
+    avatarEffectTimerRef.current = window.setTimeout(() => {
+      setAvatarEffectKey("");
+      setAvatarEffectType("standee");
+    }, 1500);
+  }
+
   return (
     <section className="game-home">
       <section className="game-hero glass">
         <div className="game-copy">
-          <p className="eyebrow">LIFE RPG HUB</p>
+          <p className="hub-mark">Life RPG Hub</p>
           <h2>{currentUser?.displayName || "今日玩家"} 的生活据点</h2>
           <p>
             完成任务、专注计时、坚持习惯都会变成经验值。今天的状态越清楚，角色升级越稳定。
@@ -1392,8 +1535,28 @@ function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, 
         </div>
 
         <div className="avatar-zone" aria-label="像素角色">
-          <div className="avatar-stage">
-            <PixelHero skin={equippedSkin} mood={daily.mood} energy={daily.energy} level={stats.level} />
+          <div
+            className={`avatar-stage ${avatarEffectKey ? `is-casting effect-${avatarEffectType}` : ""}`}
+            role="button"
+            tabIndex="0"
+            aria-label="触发角色特效"
+            onClick={triggerAvatarEffect}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                triggerAvatarEffect();
+              }
+            }}
+          >
+            <PixelHero
+              skin={equippedSkin}
+              mood={daily.mood}
+              energy={daily.energy}
+              level={stats.level}
+              effectKey={avatarEffectKey}
+              effectType={avatarEffectType}
+            />
+            {avatarEffectKey && <AvatarBurst key={avatarEffectKey} type={avatarEffectType} />}
             <div className="avatar-shadow" />
           </div>
           <div className="skin-nameplate">
@@ -1459,7 +1622,7 @@ function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, 
   );
 }
 
-function PixelHero({ skin, mood, energy, level }) {
+function PixelHero({ skin, mood, energy, level, effectKey, effectType }) {
   const expression = mood >= 4 ? "happy" : mood <= 2 ? "low" : "steady";
   return (
     <div
@@ -1471,11 +1634,31 @@ function PixelHero({ skin, mood, energy, level }) {
       }}
     >
       <div className="pixel-aura" />
-      <div className="pixel-character skin-character">
+      <div
+        className={`pixel-character skin-character ${effectKey ? `avatar-action effect-${effectType}` : ""}`}
+        key={`${skin.id}-${effectKey || "idle"}`}
+      >
         <img src={skin.image} alt={skin.name} />
         <span className="skin-sheen" />
         <span className="energy-core image-core" />
       </div>
+    </div>
+  );
+}
+
+function AvatarBurst({ type }) {
+  return (
+    <div className={`avatar-burst burst-${type}`} aria-hidden="true">
+      {Array.from({ length: 14 }).map((_, index) => (
+        <span
+          key={index}
+          style={{
+            "--burst-angle": `${index * 25.7}deg`,
+            "--burst-distance": `${82 + (index % 4) * 22}px`,
+            "--burst-delay": `${(index % 5) * 35}ms`,
+          }}
+        />
+      ))}
     </div>
   );
 }
