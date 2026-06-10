@@ -68,6 +68,13 @@ button {
   min-height: 100vh;
   margin: 0 auto;
   padding: 28px;
+  user-select: none;
+}
+
+.app-shell input,
+.app-shell textarea,
+.app-shell [contenteditable="true"] {
+  user-select: text;
 }
 
 .app-shell::before {

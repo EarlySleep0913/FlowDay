@@ -61,13 +61,45 @@ const DEFAULT_APPEARANCE = {
 };
 const BACKGROUNDS = [
   { id: "theme", name: "主题", image: null },
-  { id: "background-01", name: "背景 01", image: "/background/background-01.png" },
-  { id: "background-02", name: "背景 02", image: "/background/background-02.png" },
-  { id: "background-03", name: "背景 03", image: "/background/background-03.png" },
-  { id: "background-04", name: "背景 04", image: "/background/background-04.png" },
-  { id: "background-05", name: "背景 05", image: "/background/background-05.png" },
-  { id: "background-06", name: "背景 06", image: "/background/background-06.png" },
+  {
+    id: "background-01",
+    name: "背景 01",
+    image: "/background/webp/background-01.webp",
+    thumb: "/background/thumbs/background-01.webp",
+  },
+  {
+    id: "background-02",
+    name: "背景 02",
+    image: "/background/webp/background-02.webp",
+    thumb: "/background/thumbs/background-02.webp",
+  },
+  {
+    id: "background-03",
+    name: "背景 03",
+    image: "/background/webp/background-03.webp",
+    thumb: "/background/thumbs/background-03.webp",
+  },
+  {
+    id: "background-04",
+    name: "背景 04",
+    image: "/background/webp/background-04.webp",
+    thumb: "/background/thumbs/background-04.webp",
+  },
+  {
+    id: "background-05",
+    name: "背景 05",
+    image: "/background/webp/background-05.webp",
+    thumb: "/background/thumbs/background-05.webp",
+  },
+  {
+    id: "background-06",
+    name: "背景 06",
+    image: "/background/webp/background-06.webp",
+    thumb: "/background/thumbs/background-06.webp",
+  },
 ];
+const skinDisplayImage = (skin) => `/skins/webp/${skin.id}.webp`;
+const skinThumbImage = (skin) => `/skins/thumbs/${skin.id}.webp`;
 
 function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -1412,21 +1444,24 @@ function BackgroundSettings({ open, setOpen, appearance, selectedBackground, pat
       </div>
 
       <div className="background-options">
-        {BACKGROUNDS.map((background) => (
-          <button
-            className={`background-swatch ${appearance.backgroundId === background.id ? "active" : ""} ${
-              background.image ? "" : "theme-swatch"
-            }`}
-            key={background.id}
-            onClick={() => patchAppearance({ backgroundId: background.id })}
-            style={background.image ? { backgroundImage: `url(${background.image})` } : undefined}
-            type="button"
-            aria-label={background.name}
-            title={background.name}
-          >
-            <span>{background.image ? background.name.replace("背景 ", "") : "主题"}</span>
-          </button>
-        ))}
+        {BACKGROUNDS.map((background) => {
+          const swatchImage = background.thumb || background.image;
+          return (
+            <button
+              className={`background-swatch ${appearance.backgroundId === background.id ? "active" : ""} ${
+                background.image ? "" : "theme-swatch"
+              }`}
+              key={background.id}
+              onClick={() => patchAppearance({ backgroundId: background.id })}
+              style={swatchImage ? { backgroundImage: `url(${swatchImage})` } : undefined}
+              type="button"
+              aria-label={background.name}
+              title={background.name}
+            >
+              <span>{background.image ? background.name.replace("背景 ", "") : "主题"}</span>
+            </button>
+          );
+        })}
       </div>
 
       <label className="background-blur">
@@ -1653,7 +1688,7 @@ function PixelHero({ skin, mood, energy, level, effectKey, effectType }) {
         className={`pixel-character skin-character ${effectKey ? `avatar-action effect-${effectType}` : ""}`}
         key={`${skin.id}-${effectKey || "idle"}`}
       >
-        <img src={skin.image} alt={skin.name} />
+        <img src={skinDisplayImage(skin)} alt={skin.name} decoding="async" fetchPriority="high" />
         <span className="skin-sheen" />
         <span className="energy-core image-core" />
       </div>
@@ -1736,7 +1771,7 @@ function SkinShop({ coins, ownedSkinIds, equippedSkinId, buySkin, equipSkin }) {
                     <LockKeyhole size={15} />
                   </span>
                 )}
-                <img src={skin.image} alt={skin.name} />
+                <img src={skinThumbImage(skin)} alt={skin.name} loading="lazy" decoding="async" />
                 <span className="skin-card-shadow" />
               </div>
               <div className="skin-card-body">

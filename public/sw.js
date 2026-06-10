@@ -1,4 +1,4 @@
-const CACHE_NAME = "flowday-pwa-v1";
+const CACHE_NAME = "flowday-pwa-v2";
 const CORE_ASSETS = [
   "/",
   "/index.html",
