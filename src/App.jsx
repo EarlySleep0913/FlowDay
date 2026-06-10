@@ -7,8 +7,11 @@ import {
   ChevronRight,
   Clock3,
   Cloud,
+  Crown,
   Download,
   Flame,
+  Gamepad2,
+  Gem,
   HeartPulse,
   History,
   KeyRound,
@@ -24,11 +27,14 @@ import {
   Shield,
   Sparkles,
   Square,
+  Star,
+  Target,
   TimerReset,
   Trophy,
   Upload,
   UserCog,
   Users,
+  Zap,
 } from "lucide-react";
 
 const STORAGE_KEY = "flowday-state-v1";
@@ -216,7 +222,7 @@ function getAdvice(mood, energy, completed, total) {
 
 function App() {
   const [state, setState] = useState(loadState);
-  const [activeView, setActiveView] = useState("today");
+  const [activeView, setActiveView] = useState("home");
   const [selectedDate, setSelectedDate] = useState(todayKey());
   const [taskDraft, setTaskDraft] = useState("");
   const [taskTag, setTaskTag] = useState("工作");
@@ -370,6 +376,8 @@ function App() {
       .filter((session) => session.title === target)
       .reduce((sum, session) => sum + session.durationSeconds, 0);
   }, [state.sessions, queryTitle]);
+
+  const gameStats = useMemo(() => buildGameStats(state, todayKey()), [state]);
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -750,12 +758,22 @@ function App() {
       </header>
 
       <nav className="view-tabs glass" aria-label="主要视图">
+        <TabButton icon={Gamepad2} label="主页" active={activeView === "home"} onClick={() => setActiveView("home")} />
         <TabButton icon={ListTodo} label="今日" active={activeView === "today"} onClick={() => setActiveView("today")} />
         <TabButton icon={Clock3} label="番茄钟" active={activeView === "timer"} onClick={() => setActiveView("timer")} />
         <TabButton icon={BarChart3} label="统计" active={activeView === "stats"} onClick={() => setActiveView("stats")} />
         <TabButton icon={History} label="历史" active={activeView === "history"} onClick={() => setActiveView("history")} />
         <TabButton icon={UserCog} label="账号" active={activeView === "account"} onClick={() => setActiveView("account")} />
       </nav>
+
+      {activeView === "home" && (
+        <GameHome
+          stats={gameStats}
+          daily={state.daily[todayKey()] || { mood: 3, energy: 3, note: "" }}
+          currentUser={currentUser}
+          setActiveView={setActiveView}
+        />
+      )}
 
       {activeView === "today" && (
         <section className="dashboard-grid">
@@ -1130,6 +1148,150 @@ function EmptyState({ text }) {
   return <p className="empty-state">{text}</p>;
 }
 
+function GameHome({ stats, daily, currentUser, setActiveView }) {
+  return (
+    <section className="game-home">
+      <section className="game-hero glass">
+        <div className="game-copy">
+          <p className="eyebrow">LIFE RPG HUB</p>
+          <h2>{currentUser?.displayName || "今日玩家"} 的生活据点</h2>
+          <p>
+            完成任务、专注计时、坚持习惯都会变成经验值。今天的状态越清楚，角色升级越稳定。
+          </p>
+
+          <div className="level-card">
+            <div className="level-emblem">
+              <Crown size={24} />
+              <strong>Lv.{stats.level}</strong>
+            </div>
+            <div className="level-main">
+              <div className="level-title">
+                <span>{stats.title}</span>
+                <strong>{stats.xpInLevel}/{stats.nextLevelXp} XP</strong>
+              </div>
+              <div className="xp-track">
+                <div className="xp-fill" style={{ width: `${stats.progress}%` }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="hub-actions">
+            <button className="primary-button large" onClick={() => setActiveView("timer")}>
+              <Zap size={19} />
+              开始专注
+            </button>
+            <button className="ghost-button large" onClick={() => setActiveView("today")}>
+              <ListTodo size={19} />
+              今日任务
+            </button>
+            <button className="ghost-button large" onClick={() => setActiveView("stats")}>
+              <BarChart3 size={19} />
+              战绩统计
+            </button>
+          </div>
+        </div>
+
+        <div className="avatar-zone" aria-label="像素角色">
+          <div className="avatar-stage">
+            <PixelHero mood={daily.mood} energy={daily.energy} level={stats.level} />
+            <div className="avatar-shadow" />
+          </div>
+          <div className="status-crystals">
+            <span>
+              <HeartPulse size={16} />
+              心情 {daily.mood}/5
+            </span>
+            <span>
+              <Zap size={16} />
+              精力 {daily.energy}/5
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="quest-grid">
+        <QuestCard
+          icon={Target}
+          title="今日任务"
+          value={`${stats.todayDone}/${stats.todayTasks}`}
+          detail="每完成一个 TODO 都会给角色加经验"
+          progress={stats.todayTaskProgress}
+          onClick={() => setActiveView("today")}
+        />
+        <QuestCard
+          icon={Clock3}
+          title="今日专注"
+          value={formatMinutes(stats.todayFocus)}
+          detail="专注时间越稳定，成长条越亮"
+          progress={stats.todayFocusProgress}
+          onClick={() => setActiveView("timer")}
+        />
+        <QuestCard
+          icon={Flame}
+          title="习惯连击"
+          value={`${stats.todayHabits}/${stats.habitTotal}`}
+          detail="打卡会累积习惯经验和连续天数"
+          progress={stats.habitProgress}
+          onClick={() => setActiveView("today")}
+        />
+        <QuestCard
+          icon={Gem}
+          title="总经验"
+          value={`${stats.totalXp} XP`}
+          detail="来自任务、专注和习惯的综合成长值"
+          progress={stats.progress}
+          onClick={() => setActiveView("stats")}
+        />
+      </section>
+    </section>
+  );
+}
+
+function PixelHero({ mood, energy, level }) {
+  const expression = mood >= 4 ? "happy" : mood <= 2 ? "low" : "steady";
+  return (
+    <div className={`pixel-hero ${expression}`} style={{ "--level-glow": Math.min(1, level / 12) }}>
+      <div className="pixel-aura" />
+      <div className="pixel-character">
+        <span className="pixel hair hair-left" />
+        <span className="pixel hair hair-right" />
+        <span className="pixel head" />
+        <span className="pixel eye eye-left" />
+        <span className="pixel eye eye-right" />
+        <span className="pixel mouth" />
+        <span className="pixel neck" />
+        <span className="pixel body" />
+        <span className="pixel scarf" />
+        <span className="pixel arm arm-left" />
+        <span className="pixel arm arm-right" />
+        <span className="pixel hand hand-left" />
+        <span className="pixel hand hand-right" />
+        <span className="pixel leg leg-left" />
+        <span className="pixel leg leg-right" />
+        <span className="pixel boot boot-left" />
+        <span className="pixel boot boot-right" />
+        <span className="pixel energy-core" style={{ opacity: 0.25 + energy * 0.13 }} />
+      </div>
+    </div>
+  );
+}
+
+function QuestCard({ icon: Icon, title, value, detail, progress, onClick }) {
+  return (
+    <button className="quest-card glass" onClick={onClick}>
+      <span className="quest-icon">
+        <Icon size={20} />
+      </span>
+      <span className="quest-title">{title}</span>
+      <strong>{value}</strong>
+      <span className="quest-detail">{detail}</span>
+      <span className="quest-track">
+        <span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+      </span>
+    </button>
+  );
+}
+
 function ClickSpark() {
   const [bursts, setBursts] = useState([]);
 
@@ -1170,6 +1332,44 @@ function timerProgress(timer) {
   if (!timer.running && timer.elapsed === 0) return "0%";
   if (timer.mode === "countup") return `${Math.min(100, (timer.elapsed / 3600) * 100)}%`;
   return `${Math.min(100, (timer.elapsed / timer.plannedSeconds) * 100)}%`;
+}
+
+function buildGameStats(state, date) {
+  const totalFocus = state.sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
+  const todayFocus = state.sessions
+    .filter((session) => session.date === date)
+    .reduce((sum, session) => sum + session.durationSeconds, 0);
+  const completedTasks = state.tasks.filter((task) => task.done).length;
+  const todayTasks = state.tasks.filter((task) => task.date === date);
+  const todayDone = todayTasks.filter((task) => task.done).length;
+  const habitChecks = state.habits.reduce(
+    (sum, habit) => sum + Object.values(habit.history || {}).filter(Boolean).length,
+    0
+  );
+  const todayHabits = state.habits.filter((habit) => habit.history?.[date]).length;
+  const totalXp = Math.round(totalFocus / 60) * 4 + completedTasks * 18 + habitChecks * 12;
+  const nextLevelXp = 120;
+  const level = Math.floor(totalXp / nextLevelXp) + 1;
+  const xpInLevel = totalXp % nextLevelXp;
+  const titles = ["新手整理师", "专注见习生", "节奏冒险家", "习惯骑士", "时间炼金师", "生活统筹官"];
+  const title = titles[Math.min(titles.length - 1, Math.floor((level - 1) / 2))];
+
+  return {
+    totalXp,
+    level,
+    title,
+    xpInLevel,
+    nextLevelXp,
+    progress: (xpInLevel / nextLevelXp) * 100,
+    todayFocus,
+    todayTasks: todayTasks.length,
+    todayDone,
+    todayHabits,
+    habitTotal: state.habits.length,
+    todayTaskProgress: todayTasks.length ? (todayDone / todayTasks.length) * 100 : 0,
+    todayFocusProgress: Math.min(100, (todayFocus / 3600) * 100),
+    habitProgress: state.habits.length ? (todayHabits / state.habits.length) * 100 : 0,
+  };
 }
 
 function buildStats(sessions, start, end) {
