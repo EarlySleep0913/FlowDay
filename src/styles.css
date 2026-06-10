@@ -134,11 +134,16 @@ button {
   top: 14px;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin: 18px 0;
   padding: 8px;
   border-radius: 18px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .view-tabs button,
@@ -740,6 +745,116 @@ input[type="range"] {
   min-height: 560px;
 }
 
+.account-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.85fr) minmax(0, 1.15fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.account-card {
+  position: sticky;
+  top: 98px;
+}
+
+.cloud-icon {
+  color: #1f8f9b;
+}
+
+.account-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sync-status,
+.account-message {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  color: #315a62;
+  background: rgba(255, 255, 255, 0.46);
+  line-height: 1.6;
+}
+
+.account-message {
+  color: #0e5960;
+  font-weight: 800;
+}
+
+.account-actions,
+.login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.account-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.login-form {
+  grid-template-columns: 1fr;
+}
+
+.admin-card {
+  min-height: 500px;
+}
+
+.admin-create-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 150px auto;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.admin-user-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(140px, 1fr) 130px auto minmax(130px, 0.9fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.admin-user-row.disabled {
+  opacity: 0.62;
+}
+
+.admin-user-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #224a52;
+}
+
+.admin-user-title div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-user-title strong,
+.admin-user-title span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-user-title span {
+  color: #6b8589;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
 .history-day {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
@@ -804,7 +919,17 @@ input[type="range"] {
 
   .dashboard-grid,
   .timer-layout,
-  .stats-layout {
+  .stats-layout,
+  .account-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .account-card {
+    position: static;
+  }
+
+  .admin-create-form,
+  .admin-user-row {
     grid-template-columns: 1fr;
   }
 
@@ -834,7 +959,7 @@ input[type="range"] {
   }
 
   .view-tabs {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .view-tabs button {
@@ -847,6 +972,8 @@ input[type="range"] {
 
   .sliders,
   .metric-row,
+  .account-summary,
+  .account-actions,
   .task-form {
     grid-template-columns: 1fr;
   }

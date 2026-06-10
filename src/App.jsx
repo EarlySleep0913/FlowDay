@@ -6,19 +6,29 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Cloud,
+  Download,
   Flame,
   HeartPulse,
   History,
+  KeyRound,
   ListTodo,
+  LogIn,
+  LogOut,
   Pause,
   Play,
   Plus,
   RefreshCw,
   RotateCcw,
+  Save,
+  Shield,
   Sparkles,
   Square,
   TimerReset,
   Trophy,
+  Upload,
+  UserCog,
+  Users,
 } from "lucide-react";
 
 const STORAGE_KEY = "flowday-state-v1";
@@ -125,6 +135,23 @@ function loadState() {
   }
 }
 
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    credentials: "include",
+    headers: {
+      "content-type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const data = contentType.includes("application/json") ? await response.json() : null;
+  if (!response.ok) {
+    throw new Error(data?.error || "请求失败，请稍后重试。");
+  }
+  return data;
+}
+
 function getStreak(history, dateKey = todayKey()) {
   let cursor = dateKey;
   let streak = 0;
@@ -200,10 +227,66 @@ function App() {
   const [rangeStart, setRangeStart] = useState(shiftDate(todayKey(), -6));
   const [rangeEnd, setRangeEnd] = useState(todayKey());
   const [queryTitle, setQueryTitle] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loginUsername, setLoginUsername] = useState("earlysleep");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("未登录时仅保存在本机");
+  const [cloudReady, setCloudReady] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminForm, setAdminForm] = useState({
+    username: "",
+    displayName: "",
+    password: "",
+    role: "user",
+  });
+  const syncTimerRef = useRef(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }, [state]);
+
+  useEffect(() => {
+    let alive = true;
+    apiRequest("/api/auth/me")
+      .then(async (data) => {
+        if (!alive) return;
+        setCurrentUser(data.user);
+        if (data.user) {
+          await loadCloudState("auto");
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setSyncStatus("云同步需要部署到 Cloudflare Pages Functions 后使用");
+        }
+      })
+      .finally(() => {
+        if (alive) setAuthLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (currentUser?.role === "admin") {
+      refreshAdminUsers();
+    } else {
+      setAdminUsers([]);
+    }
+  }, [currentUser?.id, currentUser?.role]);
+
+  useEffect(() => {
+    if (!currentUser || !cloudReady) return undefined;
+    clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(() => {
+      uploadCloudState("auto");
+    }, 900);
+    return () => clearTimeout(syncTimerRef.current);
+  }, [state, currentUser?.id, cloudReady]);
 
   useEffect(() => {
     if (!timer.running || timer.paused) return undefined;
@@ -265,6 +348,136 @@ function App() {
       .filter((session) => session.title === target)
       .reduce((sum, session) => sum + session.durationSeconds, 0);
   }, [state.sessions, queryTitle]);
+
+  async function handleLogin(event) {
+    event.preventDefault();
+    setAuthMessage("");
+    setSyncing(true);
+    try {
+      const data = await apiRequest("/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ username: loginUsername, password: loginPassword }),
+      });
+      setCurrentUser(data.user);
+      setLoginPassword("");
+      await loadCloudState("login");
+      setAuthMessage("登录成功，云同步已开启。");
+    } catch (error) {
+      setAuthMessage(error.message);
+    } finally {
+      setSyncing(false);
+      setAuthLoading(false);
+    }
+  }
+
+  async function handleLogout() {
+    setSyncing(true);
+    try {
+      await uploadCloudState("manual");
+      await apiRequest("/api/auth/logout", { method: "POST", body: "{}" });
+      setCurrentUser(null);
+      setCloudReady(false);
+      setAdminUsers([]);
+      setSyncStatus("已退出，之后的数据仅保存在本机");
+      setAuthMessage("");
+    } catch (error) {
+      setAuthMessage(error.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function loadCloudState(reason = "manual") {
+    setSyncing(true);
+    try {
+      const data = await apiRequest("/api/sync");
+      if (data.state) {
+        setState(data.state);
+        setSyncStatus(`已从云端同步：${new Date().toLocaleTimeString("zh-CN")}`);
+      } else {
+        await apiRequest("/api/sync", {
+          method: "PUT",
+          body: JSON.stringify({ state }),
+        });
+        setSyncStatus("云端暂无数据，已上传当前本地数据");
+      }
+      setCloudReady(true);
+      if (reason === "manual") setAuthMessage("已从云端拉取数据。");
+    } catch (error) {
+      setAuthMessage(error.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function uploadCloudState(reason = "manual") {
+    if (!currentUser) return;
+    setSyncing(true);
+    try {
+      await apiRequest("/api/sync", {
+        method: "PUT",
+        body: JSON.stringify({ state }),
+      });
+      setSyncStatus(`已保存到云端：${new Date().toLocaleTimeString("zh-CN")}`);
+      if (reason === "manual") setAuthMessage("当前数据已上传到云端。");
+    } catch (error) {
+      setAuthMessage(error.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function refreshAdminUsers() {
+    try {
+      const data = await apiRequest("/api/admin/users");
+      setAdminUsers(data.users || []);
+    } catch (error) {
+      setAuthMessage(error.message);
+    }
+  }
+
+  async function createAdminUser(event) {
+    event.preventDefault();
+    setAuthMessage("");
+    try {
+      await apiRequest("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify(adminForm),
+      });
+      setAdminForm({ username: "", displayName: "", password: "", role: "user" });
+      await refreshAdminUsers();
+      setAuthMessage("账号已创建。");
+    } catch (error) {
+      setAuthMessage(error.message);
+    }
+  }
+
+  async function updateAdminUser(userId, patch) {
+    setAuthMessage("");
+    try {
+      await apiRequest(`/api/admin/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      await refreshAdminUsers();
+      setAuthMessage("账号已更新。");
+    } catch (error) {
+      setAuthMessage(error.message);
+    }
+  }
+
+  async function disableAdminUser(userId) {
+    setAuthMessage("");
+    try {
+      await apiRequest(`/api/admin/users/${userId}`, {
+        method: "DELETE",
+      });
+      await refreshAdminUsers();
+      setAuthMessage("账号已停用。");
+    } catch (error) {
+      setAuthMessage(error.message);
+    }
+  }
 
   function patchDaily(date, patch) {
     setState((current) => ({
@@ -445,6 +658,7 @@ function App() {
         <TabButton icon={Clock3} label="番茄钟" active={activeView === "timer"} onClick={() => setActiveView("timer")} />
         <TabButton icon={BarChart3} label="统计" active={activeView === "stats"} onClick={() => setActiveView("stats")} />
         <TabButton icon={History} label="历史" active={activeView === "history"} onClick={() => setActiveView("history")} />
+        <TabButton icon={UserCog} label="账号" active={activeView === "account"} onClick={() => setActiveView("account")} />
       </nav>
 
       {activeView === "today" && (
@@ -759,6 +973,31 @@ function App() {
           <HistoryList tasks={state.tasks} sessions={state.sessions} />
         </section>
       )}
+
+      {activeView === "account" && (
+        <AccountPanel
+          authLoading={authLoading}
+          currentUser={currentUser}
+          loginUsername={loginUsername}
+          loginPassword={loginPassword}
+          setLoginUsername={setLoginUsername}
+          setLoginPassword={setLoginPassword}
+          handleLogin={handleLogin}
+          handleLogout={handleLogout}
+          authMessage={authMessage}
+          syncing={syncing}
+          syncStatus={syncStatus}
+          loadCloudState={() => loadCloudState("manual")}
+          uploadCloudState={() => uploadCloudState("manual")}
+          adminUsers={adminUsers}
+          adminForm={adminForm}
+          setAdminForm={setAdminForm}
+          createAdminUser={createAdminUser}
+          updateAdminUser={updateAdminUser}
+          disableAdminUser={disableAdminUser}
+          refreshAdminUsers={refreshAdminUsers}
+        />
+      )}
     </main>
   );
 }
@@ -924,6 +1163,220 @@ function HistoryList({ tasks, sessions }) {
         );
       })}
     </div>
+  );
+}
+
+function AccountPanel({
+  authLoading,
+  currentUser,
+  loginUsername,
+  loginPassword,
+  setLoginUsername,
+  setLoginPassword,
+  handleLogin,
+  handleLogout,
+  authMessage,
+  syncing,
+  syncStatus,
+  loadCloudState,
+  uploadCloudState,
+  adminUsers,
+  adminForm,
+  setAdminForm,
+  createAdminUser,
+  updateAdminUser,
+  disableAdminUser,
+  refreshAdminUsers,
+}) {
+  return (
+    <section className="account-layout">
+      <section className="panel glass account-card">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">账号与云同步</p>
+            <h2>{currentUser ? `你好，${currentUser.displayName}` : "登录后开启云同步"}</h2>
+          </div>
+          <Cloud className="cloud-icon" size={28} />
+        </div>
+
+        {authLoading ? (
+          <EmptyState text="正在检查登录状态。" />
+        ) : currentUser ? (
+          <>
+            <div className="account-summary">
+              <Metric icon={Shield} label="角色" value={currentUser.role === "admin" ? "管理员" : "用户"} />
+              <Metric icon={Cloud} label="同步状态" value={syncing ? "同步中" : "已就绪"} />
+              <Metric icon={Save} label="本地缓存" value="已开启" />
+            </div>
+
+            <p className="sync-status">{syncStatus}</p>
+            <div className="account-actions">
+              <button className="primary-button" onClick={uploadCloudState} disabled={syncing}>
+                <Upload size={18} />
+                上传当前数据
+              </button>
+              <button className="ghost-button" onClick={loadCloudState} disabled={syncing}>
+                <Download size={18} />
+                拉取云端数据
+              </button>
+              <button className="ghost-button" onClick={handleLogout} disabled={syncing}>
+                <LogOut size={18} />
+                退出
+              </button>
+            </div>
+          </>
+        ) : (
+          <form className="login-form" onSubmit={handleLogin}>
+            <label className="field">
+              <span>用户名</span>
+              <input
+                value={loginUsername}
+                onChange={(event) => setLoginUsername(event.target.value)}
+                autoComplete="username"
+              />
+            </label>
+            <label className="field">
+              <span>密码</span>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </label>
+            <button className="primary-button large" type="submit" disabled={syncing}>
+              <LogIn size={20} />
+              登录
+            </button>
+          </form>
+        )}
+
+        {authMessage && <p className="account-message">{authMessage}</p>}
+      </section>
+
+      {currentUser?.role === "admin" && (
+        <section className="panel glass admin-card">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">管理员</p>
+              <h2>账号管理</h2>
+            </div>
+            <button className="icon-button" onClick={refreshAdminUsers} aria-label="刷新账号列表">
+              <RefreshCw size={18} />
+            </button>
+          </div>
+
+          <form className="admin-create-form" onSubmit={createAdminUser}>
+            <input
+              value={adminForm.username}
+              onChange={(event) => setAdminForm((form) => ({ ...form, username: event.target.value }))}
+              placeholder="用户名"
+            />
+            <input
+              value={adminForm.displayName}
+              onChange={(event) => setAdminForm((form) => ({ ...form, displayName: event.target.value }))}
+              placeholder="显示名称"
+            />
+            <input
+              type="password"
+              value={adminForm.password}
+              onChange={(event) => setAdminForm((form) => ({ ...form, password: event.target.value }))}
+              placeholder="初始密码"
+            />
+            <select
+              value={adminForm.role}
+              onChange={(event) => setAdminForm((form) => ({ ...form, role: event.target.value }))}
+            >
+              <option value="user">普通用户</option>
+              <option value="admin">管理员</option>
+            </select>
+            <button className="primary-button" type="submit">
+              <Plus size={18} />
+              创建账号
+            </button>
+          </form>
+
+          <div className="admin-user-list">
+            {adminUsers.length === 0 ? (
+              <EmptyState text="暂无账号或正在加载。" />
+            ) : (
+              adminUsers.map((user) => (
+                <AdminUserRow
+                  key={user.id}
+                  user={user}
+                  currentUser={currentUser}
+                  updateAdminUser={updateAdminUser}
+                  disableAdminUser={disableAdminUser}
+                />
+              ))
+            )}
+          </div>
+        </section>
+      )}
+    </section>
+  );
+}
+
+function AdminUserRow({ user, currentUser, updateAdminUser, disableAdminUser }) {
+  const [displayName, setDisplayName] = useState(user.displayName);
+  const [role, setRole] = useState(user.role);
+  const [password, setPassword] = useState("");
+  const isSelf = user.id === currentUser.id;
+
+  useEffect(() => {
+    setDisplayName(user.displayName);
+    setRole(user.role);
+    setPassword("");
+  }, [user.id, user.displayName, user.role]);
+
+  return (
+    <article className={`admin-user-row ${user.disabled ? "disabled" : ""}`}>
+      <div className="admin-user-title">
+        <Users size={18} />
+        <div>
+          <strong>{user.username}</strong>
+          <span>{user.disabled ? "已停用" : user.role === "admin" ? "管理员" : "普通用户"}</span>
+        </div>
+      </div>
+
+      <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} />
+      <select value={role} onChange={(event) => setRole(event.target.value)} disabled={isSelf}>
+        <option value="user">普通用户</option>
+        <option value="admin">管理员</option>
+      </select>
+      <button
+        className="ghost-button"
+        onClick={() => updateAdminUser(user.id, { displayName, role })}
+      >
+        <Save size={16} />
+        保存
+      </button>
+
+      <input
+        type="password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        placeholder="新密码"
+      />
+      <button
+        className="ghost-button"
+        onClick={() => {
+          updateAdminUser(user.id, { password });
+          setPassword("");
+        }}
+        disabled={!password}
+      >
+        <KeyRound size={16} />
+        重置密码
+      </button>
+      <button
+        className="danger-button"
+        onClick={() => disableAdminUser(user.id)}
+        disabled={isSelf || user.disabled}
+      >
+        停用
+      </button>
+    </article>
   );
 }
 
