@@ -10,7 +10,7 @@ export function randomToken() {
   return base64url(bytes);
 }
 
-export async function hashPassword(password, salt, iterations = 210000) {
+export async function hashPassword(password, salt, iterations = 100000) {
   const key = await crypto.subtle.importKey(
     "raw",
     encoder.encode(password),

@@ -41,8 +41,8 @@ INSERT OR IGNORE INTO users (
   'admin-earlysleep',
   'earlysleep',
   'earlysleep',
-  'U_pJ1hQU9eH4m99yRgdwxW-3G7ooaCbShQIHhkncqYU',
+  '-QX_1tCduToT0p4lemzpY5cSxytUMpfb44W5NZBkuo0',
   'WnFkqMbXjhr227iRDvbbxA',
-  210000,
+  100000,
   'admin'
 );

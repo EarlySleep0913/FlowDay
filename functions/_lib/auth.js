@@ -23,7 +23,7 @@ export async function verifyPassword(password, user) {
 
 export async function makePasswordRecord(password) {
   const salt = randomSalt();
-  const iterations = 210000;
+  const iterations = 100000;
   const hash = await hashPassword(password, salt, iterations);
   return { salt, iterations, hash };
 }
