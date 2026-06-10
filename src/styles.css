@@ -7,10 +7,33 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  scrollbar-color: rgba(35, 91, 104, 0.28) transparent;
+  scrollbar-width: thin;
 }
 
 * {
   box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(35, 91, 104, 0.24);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(35, 91, 104, 0.38);
+  background-clip: padding-box;
 }
 
 body {
@@ -30,6 +53,8 @@ input,
 select,
 textarea {
   font: inherit;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 button {
@@ -2773,6 +2798,28 @@ input[type="range"] {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (display-mode: window-controls-overlay) {
+  .app-shell {
+    width: min(1440px, 100%);
+    padding-top: max(28px, calc(env(titlebar-area-height, 0px) + 18px));
+  }
+
+  .topbar {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  .topbar-pills,
+  .topbar button,
+  .background-control,
+  .view-tabs,
+  .panel,
+  .game-home {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
   }
 }
 
