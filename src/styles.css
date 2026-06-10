@@ -87,10 +87,48 @@ button {
 }
 
 .glass {
+  --spotlight-x: 50%;
+  --spotlight-y: 0%;
   border: 1px solid rgba(255, 255, 255, 0.62);
-  background: rgba(255, 255, 255, 0.44);
+  background:
+    radial-gradient(
+      circle at var(--spotlight-x) var(--spotlight-y),
+      rgba(255, 255, 255, 0.82),
+      rgba(109, 212, 205, 0.16) 8rem,
+      transparent 18rem
+    ),
+    rgba(255, 255, 255, 0.44);
   box-shadow: 0 24px 80px rgba(42, 91, 101, 0.14);
   backdrop-filter: blur(22px);
+}
+
+.click-spark-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.click-spark {
+  position: absolute;
+  left: var(--spark-x);
+  top: var(--spark-y);
+  width: 1px;
+  height: 1px;
+}
+
+.click-spark i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 7px;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1aa69d, rgba(111, 179, 223, 0));
+  box-shadow: 0 0 12px rgba(37, 170, 160, 0.4);
+  transform: rotate(var(--spark-angle)) translateX(0);
+  transform-origin: 0 50%;
+  animation: clickSpark 680ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 .topbar {
@@ -630,6 +668,7 @@ input[type="range"] {
 
 .timer-ring {
   --progress: 0%;
+  position: relative;
   display: grid;
   place-items: center;
   width: min(370px, 76vw);
@@ -645,7 +684,30 @@ input[type="range"] {
   animation: timerBreath 3.8s ease-in-out infinite;
 }
 
+.timer-ring::after {
+  position: absolute;
+  inset: -12px;
+  content: "";
+  border-radius: inherit;
+  background:
+    conic-gradient(
+      from 0deg,
+      transparent 0deg,
+      rgba(35, 173, 164, 0.0) 60deg,
+      rgba(35, 173, 164, 0.38) 98deg,
+      rgba(107, 172, 219, 0.42) 126deg,
+      transparent 168deg,
+      transparent 360deg
+    );
+  filter: blur(1px);
+  opacity: 0.7;
+  mask: radial-gradient(circle, transparent 0 61%, black 62% 68%, transparent 69%);
+  animation: spinGlow 7s linear infinite;
+}
+
 .timer-ring span {
+  position: relative;
+  z-index: 1;
   color: #102d34;
   font-size: clamp(3rem, 11vw, 6.6rem);
   font-weight: 900;
@@ -1093,6 +1155,28 @@ input[type="range"] {
 
   100% {
     transform: scale(1);
+  }
+}
+
+@keyframes clickSpark {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--spark-angle)) translateX(0) scaleX(0.4);
+  }
+
+  62% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle)) translateX(34px) scaleX(1.2);
+  }
+}
+
+@keyframes spinGlow {
+  to {
+    transform: rotate(360deg);
   }
 }
 

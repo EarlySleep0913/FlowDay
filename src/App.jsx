@@ -724,8 +724,17 @@ function App() {
     });
   }
 
+  function handleSpotlightMove(event) {
+    const target = event.target.closest?.(".glass");
+    if (!target || !event.currentTarget.contains(target)) return;
+    const rect = target.getBoundingClientRect();
+    target.style.setProperty("--spotlight-x", `${event.clientX - rect.left}px`);
+    target.style.setProperty("--spotlight-y", `${event.clientY - rect.top}px`);
+  }
+
   return (
-    <main className="app-shell">
+    <main className="app-shell" onPointerMove={handleSpotlightMove}>
+      <ClickSpark />
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
 
@@ -1119,6 +1128,42 @@ function Metric({ icon: Icon, label, value }) {
 
 function EmptyState({ text }) {
   return <p className="empty-state">{text}</p>;
+}
+
+function ClickSpark() {
+  const [bursts, setBursts] = useState([]);
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      const id = uid();
+      setBursts((current) => [
+        ...current.slice(-7),
+        { id, x: event.clientX, y: event.clientY },
+      ]);
+      window.setTimeout(() => {
+        setBursts((current) => current.filter((burst) => burst.id !== id));
+      }, 720);
+    }
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
+
+  return (
+    <div className="click-spark-layer" aria-hidden="true">
+      {bursts.map((burst) => (
+        <span
+          className="click-spark"
+          key={burst.id}
+          style={{ "--spark-x": `${burst.x}px`, "--spark-y": `${burst.y}px` }}
+        >
+          {Array.from({ length: 8 }).map((_, index) => (
+            <i key={index} style={{ "--spark-angle": `${index * 45}deg` }} />
+          ))}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 function timerProgress(timer) {
