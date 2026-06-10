@@ -1,6 +1,6 @@
 node_modules/
 dist/
-dev-server.log
+dev-server*.log
 .env
 .env.local
 .wrangler/

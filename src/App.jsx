@@ -35,6 +35,7 @@ const STORAGE_KEY = "flowday-state-v1";
 const todayKey = () => toDateKey(new Date());
 const pad = (value) => String(value).padStart(2, "0");
 const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+const COUNTUP_PROGRESS_SECONDS = 60 * 60;
 
 function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -71,6 +72,20 @@ function formatMinutes(seconds) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+}
+
+function getTimerElapsed(timer) {
+  if (!timer.startedAt) return Math.max(0, Math.floor(timer.elapsed || 0));
+  if (!timer.running || timer.paused || !timer.activeStartedAt) {
+    return Math.max(0, Math.floor(timer.elapsed || 0));
+  }
+  const liveSeconds = Math.floor((Date.now() - timer.activeStartedAt) / 1000);
+  return Math.max(0, Math.floor((timer.accumulatedSeconds || 0) + liveSeconds));
+}
+
+function getTimerRemaining(timer, elapsed = getTimerElapsed(timer)) {
+  if (timer.mode !== "countdown") return 0;
+  return Math.max(0, Math.floor((timer.plannedSeconds || 0) - elapsed));
 }
 
 function emptyState() {
@@ -217,6 +232,8 @@ function App() {
     elapsed: 0,
     remaining: 25 * 60,
     startedAt: null,
+    activeStartedAt: null,
+    accumulatedSeconds: 0,
     source: "preset",
     title: "专注写作",
     taskId: "",
@@ -292,17 +309,22 @@ function App() {
     if (!timer.running || timer.paused) return undefined;
     const interval = setInterval(() => {
       setTimer((current) => {
-        const elapsed = current.elapsed + 1;
-        const remaining =
-          current.mode === "countdown"
-            ? Math.max(0, current.plannedSeconds - elapsed)
-            : 0;
+        const elapsed = getTimerElapsed(current);
+        const remaining = getTimerRemaining(current, elapsed);
         if (current.mode === "countdown" && remaining <= 0) {
-          return { ...current, elapsed, remaining, running: false, paused: false };
+          return {
+            ...current,
+            elapsed: current.plannedSeconds,
+            remaining: 0,
+            running: false,
+            paused: false,
+            activeStartedAt: null,
+            accumulatedSeconds: current.plannedSeconds,
+          };
         }
         return { ...current, elapsed, remaining };
       });
-    }, 1000);
+    }, 250);
     return () => clearInterval(interval);
   }, [timer.running, timer.paused]);
 
@@ -562,14 +584,20 @@ function App() {
     const task = state.tasks.find((item) => item.id === timerTaskId);
     const usingTask = timerSource === "todo" && task;
     const title = usingTask ? task.title : presetTitle.trim() || "自由专注";
-    const plannedSeconds = Math.max(1, Number(durationMinutes) || 1) * 60;
+    const plannedSeconds =
+      timerMode === "countdown"
+        ? Math.max(1, Number(durationMinutes) || 1) * 60
+        : COUNTUP_PROGRESS_SECONDS;
+    const startedAt = new Date().toISOString();
     savedTimerStartRef.current = null;
     setTimer({
       running: true,
       paused: false,
       elapsed: 0,
       remaining: timerMode === "countdown" ? plannedSeconds : 0,
-      startedAt: new Date().toISOString(),
+      startedAt,
+      activeStartedAt: Date.now(),
+      accumulatedSeconds: 0,
       source: usingTask ? "todo" : "preset",
       title,
       taskId: usingTask ? task.id : "",
@@ -579,11 +607,11 @@ function App() {
   }
 
   function finishTimer() {
-    if (!timer.startedAt || timer.elapsed <= 0) return;
+    const durationSeconds = getTimerElapsed(timer);
+    if (!timer.startedAt || durationSeconds <= 0) return;
     if (savedTimerStartRef.current === timer.startedAt) return;
     savedTimerStartRef.current = timer.startedAt;
 
-    const durationSeconds = timer.elapsed;
     const session = {
       id: uid(),
       taskId: timer.taskId,
@@ -610,8 +638,10 @@ function App() {
       running: false,
       paused: false,
       elapsed: 0,
-      remaining: current.plannedSeconds,
+      remaining: timerMode === "countdown" ? current.plannedSeconds : 0,
       startedAt: null,
+      activeStartedAt: null,
+      accumulatedSeconds: 0,
       source: timerSource,
       title: presetTitle,
       taskId: timerTaskId,
@@ -621,7 +651,10 @@ function App() {
   }
 
   function resetTimer() {
-    const plannedSeconds = Math.max(1, Number(durationMinutes) || 1) * 60;
+    const plannedSeconds =
+      timerMode === "countdown"
+        ? Math.max(1, Number(durationMinutes) || 1) * 60
+        : COUNTUP_PROGRESS_SECONDS;
     savedTimerStartRef.current = null;
     setTimer({
       running: false,
@@ -629,11 +662,65 @@ function App() {
       elapsed: 0,
       remaining: timerMode === "countdown" ? plannedSeconds : 0,
       startedAt: null,
+      activeStartedAt: null,
+      accumulatedSeconds: 0,
       source: timerSource,
       title: presetTitle,
       taskId: timerTaskId,
       mode: timerMode,
       plannedSeconds,
+    });
+  }
+
+  function changeTimerMode(mode) {
+    setTimerMode(mode);
+    if (timer.running) return;
+    const plannedSeconds =
+      mode === "countdown"
+        ? Math.max(1, Number(durationMinutes) || 1) * 60
+        : COUNTUP_PROGRESS_SECONDS;
+    setTimer((current) => ({
+      ...current,
+      mode,
+      plannedSeconds,
+      elapsed: 0,
+      remaining: mode === "countdown" ? plannedSeconds : 0,
+      activeStartedAt: null,
+      accumulatedSeconds: 0,
+    }));
+  }
+
+  function changeDurationMinutes(value) {
+    setDurationMinutes(value);
+    if (timer.running || timerMode !== "countdown") return;
+    const plannedSeconds = Math.max(1, Number(value) || 1) * 60;
+    setTimer((current) => ({
+      ...current,
+      plannedSeconds,
+      remaining: plannedSeconds,
+    }));
+  }
+
+  function toggleTimerPause() {
+    setTimer((current) => {
+      if (!current.running) return current;
+      const elapsed = getTimerElapsed(current);
+      if (current.paused) {
+        return {
+          ...current,
+          paused: false,
+          activeStartedAt: Date.now(),
+          accumulatedSeconds: elapsed,
+        };
+      }
+      return {
+        ...current,
+        paused: true,
+        elapsed,
+        remaining: getTimerRemaining(current, elapsed),
+        activeStartedAt: null,
+        accumulatedSeconds: elapsed,
+      };
     });
   }
 
@@ -824,8 +911,8 @@ function App() {
                 <h2>{timer.running ? timer.title : "设置一次专注"}</h2>
               </div>
               <div className="mode-switch">
-                <button className={timerMode === "countdown" ? "active" : ""} onClick={() => setTimerMode("countdown")}>倒计时</button>
-                <button className={timerMode === "countup" ? "active" : ""} onClick={() => setTimerMode("countup")}>正计时</button>
+                <button className={timerMode === "countdown" ? "active" : ""} onClick={() => changeTimerMode("countdown")}>倒计时</button>
+                <button className={timerMode === "countup" ? "active" : ""} onClick={() => changeTimerMode("countup")}>正计时</button>
               </div>
             </div>
 
@@ -844,7 +931,7 @@ function App() {
                 </button>
               ) : (
                 <>
-                  <button className="primary-button large" onClick={() => setTimer((current) => ({ ...current, paused: !current.paused }))}>
+                  <button className="primary-button large" onClick={toggleTimerPause}>
                     {timer.paused ? <Play size={20} /> : <Pause size={20} />}
                     {timer.paused ? "继续" : "暂停"}
                   </button>
@@ -885,16 +972,25 @@ function App() {
               </label>
             )}
 
-            <label className="field">
-              <span>倒计时时长</span>
-              <input
-                type="number"
-                min="1"
-                max="180"
-                value={durationMinutes}
-                onChange={(event) => setDurationMinutes(event.target.value)}
-              />
-            </label>
+            {timerMode === "countdown" && (
+              <label className="field">
+                <span>倒计时时长</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="180"
+                  value={durationMinutes}
+                  onChange={(event) => changeDurationMinutes(event.target.value)}
+                />
+              </label>
+            )}
+
+            {timerMode === "countup" && (
+              <div className="mode-note">
+                <Clock3 size={18} />
+                <span>正计时会从 00:00 开始，结束时保存实际经过时间。</span>
+              </div>
+            )}
 
             <div className="recent-list">
               <p className="eyebrow">最近专注</p>
