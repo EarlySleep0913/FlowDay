@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock3,
   Cloud,
+  Coins,
   Crown,
   Download,
   Flame,
@@ -18,6 +19,7 @@ import {
   ListTodo,
   LogIn,
   LogOut,
+  LockKeyhole,
   Pause,
   Play,
   Plus,
@@ -25,6 +27,8 @@ import {
   RotateCcw,
   Save,
   Shield,
+  Shirt,
+  ShoppingBag,
   Sparkles,
   Square,
   Star,
@@ -36,12 +40,17 @@ import {
   Users,
   Zap,
 } from "lucide-react";
+import { DEFAULT_SKIN_ID, getSkin, rarityMeta, skins } from "./skins";
 
 const STORAGE_KEY = "flowday-state-v1";
 const todayKey = () => toDateKey(new Date());
 const pad = (value) => String(value).padStart(2, "0");
 const uid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 const COUNTUP_PROGRESS_SECONDS = 60 * 60;
+const TASK_COIN_REWARD = 20;
+const HABIT_COIN_REWARD = 12;
+const FOCUS_COIN_UNIT_SECONDS = 5 * 60;
+const FOCUS_COIN_REWARD = 8;
 
 function toDateKey(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -78,6 +87,11 @@ function formatMinutes(seconds) {
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return rest ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+}
+
+function getFocusCoinReward(seconds) {
+  if (seconds < 60) return 0;
+  return Math.max(2, Math.floor(seconds / FOCUS_COIN_UNIT_SECONDS) * FOCUS_COIN_REWARD);
 }
 
 function getTimerElapsed(timer) {
@@ -144,13 +158,55 @@ function emptyState() {
     daily: {
       [date]: { mood: 4, energy: 3, note: "" },
     },
+    wallet: {
+      coins: 120,
+      lifetimeCoins: 120,
+    },
+    inventory: {
+      ownedSkinIds: [DEFAULT_SKIN_ID],
+      equippedSkinId: DEFAULT_SKIN_ID,
+    },
+  };
+}
+
+function normalizeState(rawState) {
+  const base = emptyState();
+  const raw = rawState && typeof rawState === "object" ? rawState : {};
+  const validSkinIds = new Set(skins.map((skin) => skin.id));
+  const ownedSkinIds = [
+    ...new Set([DEFAULT_SKIN_ID, ...(raw.inventory?.ownedSkinIds || raw.ownedSkins || [])]),
+  ].filter((skinId) => validSkinIds.has(skinId));
+  const equippedSkinId = ownedSkinIds.includes(raw.inventory?.equippedSkinId)
+    ? raw.inventory.equippedSkinId
+    : DEFAULT_SKIN_ID;
+
+  return {
+    ...base,
+    ...raw,
+    tasks: Array.isArray(raw.tasks) ? raw.tasks : base.tasks,
+    sessions: Array.isArray(raw.sessions) ? raw.sessions : base.sessions,
+    habits: Array.isArray(raw.habits) ? raw.habits : base.habits,
+    daily: raw.daily && typeof raw.daily === "object" ? raw.daily : base.daily,
+    wallet: {
+      ...base.wallet,
+      ...(raw.wallet || {}),
+      coins: Math.max(0, Number(raw.wallet?.coins ?? base.wallet.coins) || 0),
+      lifetimeCoins: Math.max(
+        Number(raw.wallet?.lifetimeCoins ?? raw.wallet?.coins ?? base.wallet.lifetimeCoins) || 0,
+        Number(raw.wallet?.coins ?? base.wallet.coins) || 0
+      ),
+    },
+    inventory: {
+      ownedSkinIds,
+      equippedSkinId,
+    },
   };
 }
 
 function loadState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : emptyState();
+    return saved ? normalizeState(JSON.parse(saved)) : emptyState();
   } catch {
     return emptyState();
   }
@@ -265,6 +321,7 @@ function App() {
     password: "",
     role: "user",
   });
+  const [rewardNotice, setRewardNotice] = useState(null);
   const syncTimerRef = useRef(null);
 
   useEffect(() => {
@@ -378,6 +435,16 @@ function App() {
   }, [state.sessions, queryTitle]);
 
   const gameStats = useMemo(() => buildGameStats(state, todayKey()), [state]);
+  const equippedSkin = getSkin(state.inventory?.equippedSkinId);
+  const ownedSkinIds = state.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+
+  function showRewardNotice(amount, reason) {
+    const id = uid();
+    setRewardNotice({ id, amount, reason });
+    window.setTimeout(() => {
+      setRewardNotice((notice) => (notice?.id === id ? null : notice));
+    }, 1800);
+  }
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -422,7 +489,7 @@ function App() {
     try {
       const data = await apiRequest("/api/sync");
       if (data.state) {
-        setState(data.state);
+        setState(normalizeState(data.state));
         setSyncStatus(`已从云端同步：${new Date().toLocaleTimeString("zh-CN")}`);
       } else {
         await apiRequest("/api/sync", {
@@ -542,12 +609,30 @@ function App() {
   }
 
   function toggleTask(taskId) {
-    setState((current) => ({
-      ...current,
-      tasks: current.tasks.map((task) =>
-        task.id === taskId ? { ...task, done: !task.done } : task
-      ),
-    }));
+    const targetTask = state.tasks.find((task) => task.id === taskId);
+    const earnedCoins = targetTask && !targetTask.done && !targetTask.rewardedAt ? TASK_COIN_REWARD : 0;
+    setState((current) => {
+      const tasks = current.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+        const done = !task.done;
+        const shouldReward = done && !task.rewardedAt;
+        return {
+          ...task,
+          done,
+          rewardedAt: shouldReward ? new Date().toISOString() : task.rewardedAt,
+        };
+      });
+      return {
+        ...current,
+        wallet: {
+          ...(current.wallet || {}),
+          coins: (current.wallet?.coins || 0) + earnedCoins,
+          lifetimeCoins: (current.wallet?.lifetimeCoins || 0) + earnedCoins,
+        },
+        tasks,
+      };
+    });
+    if (earnedCoins) showRewardNotice(earnedCoins, "任务完成");
   }
 
   function removeTask(taskId) {
@@ -572,20 +657,41 @@ function App() {
   }
 
   function toggleHabit(habitId) {
-    setState((current) => ({
-      ...current,
-      habits: current.habits.map((habit) => {
+    const targetHabit = state.habits.find((habit) => habit.id === habitId);
+    const wasChecked = Boolean(targetHabit?.history?.[selectedDate]);
+    const earnedCoins =
+      targetHabit && !wasChecked && !targetHabit.rewardedDates?.[selectedDate]
+        ? HABIT_COIN_REWARD
+        : 0;
+    setState((current) => {
+      const habits = current.habits.map((habit) => {
         if (habit.id !== habitId) return habit;
         const checked = Boolean(habit.history[selectedDate]);
         const history = { ...habit.history, [selectedDate]: !checked };
+        const rewardedDates = { ...(habit.rewardedDates || {}) };
+        const shouldReward = !checked && !rewardedDates[selectedDate];
         if (checked) delete history[selectedDate];
+        if (shouldReward) {
+          rewardedDates[selectedDate] = new Date().toISOString();
+        }
         return {
           ...habit,
           history,
+          rewardedDates,
           xp: Math.max(0, habit.xp + (checked ? -10 : 10)),
         };
-      }),
-    }));
+      });
+      return {
+        ...current,
+        wallet: {
+          ...(current.wallet || {}),
+          coins: (current.wallet?.coins || 0) + earnedCoins,
+          lifetimeCoins: (current.wallet?.lifetimeCoins || 0) + earnedCoins,
+        },
+        habits,
+      };
+    });
+    if (earnedCoins) showRewardNotice(earnedCoins, "习惯打卡");
   }
 
   function startTimer() {
@@ -619,6 +725,7 @@ function App() {
     if (!timer.startedAt || durationSeconds <= 0) return;
     if (savedTimerStartRef.current === timer.startedAt) return;
     savedTimerStartRef.current = timer.startedAt;
+    const earnedCoins = getFocusCoinReward(durationSeconds);
 
     const session = {
       id: uid(),
@@ -634,6 +741,11 @@ function App() {
 
     setState((snapshot) => ({
       ...snapshot,
+      wallet: {
+        ...(snapshot.wallet || {}),
+        coins: (snapshot.wallet?.coins || 0) + earnedCoins,
+        lifetimeCoins: (snapshot.wallet?.lifetimeCoins || 0) + earnedCoins,
+      },
       sessions: [session, ...snapshot.sessions],
       tasks: snapshot.tasks.map((task) =>
         task.id === timer.taskId
@@ -656,6 +768,7 @@ function App() {
       mode: timerMode,
       plannedSeconds: current.plannedSeconds,
     }));
+    if (earnedCoins) showRewardNotice(earnedCoins, "专注完成");
   }
 
   function resetTimer() {
@@ -732,6 +845,54 @@ function App() {
     });
   }
 
+  function equipSkin(skinId) {
+    const skin = getSkin(skinId);
+    setState((current) => {
+      const owned = current.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+      if (!owned.includes(skin.id)) return current;
+      return {
+        ...current,
+        inventory: {
+          ...current.inventory,
+          ownedSkinIds: owned,
+          equippedSkinId: skin.id,
+        },
+      };
+    });
+    showRewardNotice(0, `已装备 ${skin.name}`);
+  }
+
+  function buySkin(skinId) {
+    const skin = getSkin(skinId);
+    const owned = ownedSkinIds.includes(skin.id);
+    if (owned) {
+      equipSkin(skin.id);
+      return;
+    }
+    if ((state.wallet?.coins || 0) < skin.price) {
+      showRewardNotice(0, "金币还不够");
+      return;
+    }
+    setState((current) => {
+      const currentOwned = current.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+      if (currentOwned.includes(skin.id)) return current;
+      return {
+        ...current,
+        wallet: {
+          ...(current.wallet || {}),
+          coins: Math.max(0, (current.wallet?.coins || 0) - skin.price),
+          lifetimeCoins: current.wallet?.lifetimeCoins || 0,
+        },
+        inventory: {
+          ...(current.inventory || {}),
+          ownedSkinIds: [...currentOwned, skin.id],
+          equippedSkinId: skin.id,
+        },
+      };
+    });
+    showRewardNotice(0, `已解锁 ${skin.name}`);
+  }
+
   function handleSpotlightMove(event) {
     const target = event.target.closest?.(".glass");
     if (!target || !event.currentTarget.contains(target)) return;
@@ -745,15 +906,36 @@ function App() {
       <ClickSpark />
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
+      {rewardNotice && (
+        <div className={`reward-toast ${rewardNotice.amount ? "coin" : "info"}`}>
+          {rewardNotice.amount ? (
+            <>
+              <Coins size={18} />
+              +{rewardNotice.amount} 金币 · {rewardNotice.reason}
+            </>
+          ) : (
+            <>
+              <Sparkles size={18} />
+              {rewardNotice.reason}
+            </>
+          )}
+        </div>
+      )}
 
       <header className="topbar glass">
         <div>
           <p className="eyebrow">FlowDay</p>
           <h1>任务、习惯和专注时间都在一个地方</h1>
         </div>
-        <div className="date-pill">
-          <CalendarDays size={18} />
-          <span>{formatDate(todayKey())}</span>
+        <div className="topbar-pills">
+          <div className="date-pill">
+            <CalendarDays size={18} />
+            <span>{formatDate(todayKey())}</span>
+          </div>
+          <div className="date-pill coin-pill">
+            <Coins size={18} />
+            <span>{state.wallet?.coins || 0} 金币</span>
+          </div>
         </div>
       </header>
 
@@ -761,6 +943,7 @@ function App() {
         <TabButton icon={Gamepad2} label="主页" active={activeView === "home"} onClick={() => setActiveView("home")} />
         <TabButton icon={ListTodo} label="今日" active={activeView === "today"} onClick={() => setActiveView("today")} />
         <TabButton icon={Clock3} label="番茄钟" active={activeView === "timer"} onClick={() => setActiveView("timer")} />
+        <TabButton icon={ShoppingBag} label="商店" active={activeView === "shop"} onClick={() => setActiveView("shop")} />
         <TabButton icon={BarChart3} label="统计" active={activeView === "stats"} onClick={() => setActiveView("stats")} />
         <TabButton icon={History} label="历史" active={activeView === "history"} onClick={() => setActiveView("history")} />
         <TabButton icon={UserCog} label="账号" active={activeView === "account"} onClick={() => setActiveView("account")} />
@@ -771,6 +954,9 @@ function App() {
           stats={gameStats}
           daily={state.daily[todayKey()] || { mood: 3, energy: 3, note: "" }}
           currentUser={currentUser}
+          equippedSkin={equippedSkin}
+          coins={state.wallet?.coins || 0}
+          ownedCount={ownedSkinIds.length}
           setActiveView={setActiveView}
         />
       )}
@@ -1036,6 +1222,16 @@ function App() {
         </section>
       )}
 
+      {activeView === "shop" && (
+        <SkinShop
+          coins={state.wallet?.coins || 0}
+          ownedSkinIds={ownedSkinIds}
+          equippedSkinId={equippedSkin.id}
+          buySkin={buySkin}
+          equipSkin={equipSkin}
+        />
+      )}
+
       {activeView === "stats" && (
         <section className="stats-layout">
           <section className="panel glass wide-panel">
@@ -1148,7 +1344,7 @@ function EmptyState({ text }) {
   return <p className="empty-state">{text}</p>;
 }
 
-function GameHome({ stats, daily, currentUser, setActiveView }) {
+function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, setActiveView }) {
   return (
     <section className="game-home">
       <section className="game-hero glass">
@@ -1184,6 +1380,10 @@ function GameHome({ stats, daily, currentUser, setActiveView }) {
               <ListTodo size={19} />
               今日任务
             </button>
+            <button className="ghost-button large" onClick={() => setActiveView("shop")}>
+              <ShoppingBag size={19} />
+              皮肤商店
+            </button>
             <button className="ghost-button large" onClick={() => setActiveView("stats")}>
               <BarChart3 size={19} />
               战绩统计
@@ -1193,8 +1393,12 @@ function GameHome({ stats, daily, currentUser, setActiveView }) {
 
         <div className="avatar-zone" aria-label="像素角色">
           <div className="avatar-stage">
-            <PixelHero mood={daily.mood} energy={daily.energy} level={stats.level} />
+            <PixelHero skin={equippedSkin} mood={daily.mood} energy={daily.energy} level={stats.level} />
             <div className="avatar-shadow" />
+          </div>
+          <div className="skin-nameplate">
+            <span>{equippedSkin.title}</span>
+            <strong>{equippedSkin.name}</strong>
           </div>
           <div className="status-crystals">
             <span>
@@ -1204,6 +1408,14 @@ function GameHome({ stats, daily, currentUser, setActiveView }) {
             <span>
               <Zap size={16} />
               精力 {daily.energy}/5
+            </span>
+            <span>
+              <Coins size={16} />
+              {coins} 金币
+            </span>
+            <span>
+              <Shirt size={16} />
+              {ownedCount}/{skins.length} 皮肤
             </span>
           </div>
         </div>
@@ -1236,41 +1448,33 @@ function GameHome({ stats, daily, currentUser, setActiveView }) {
         />
         <QuestCard
           icon={Gem}
-          title="总经验"
-          value={`${stats.totalXp} XP`}
-          detail="来自任务、专注和习惯的综合成长值"
+          title="金币库存"
+          value={`${coins}`}
+          detail="完成任务、打卡和专注可获得金币"
           progress={stats.progress}
-          onClick={() => setActiveView("stats")}
+          onClick={() => setActiveView("shop")}
         />
       </section>
     </section>
   );
 }
 
-function PixelHero({ mood, energy, level }) {
+function PixelHero({ skin, mood, energy, level }) {
   const expression = mood >= 4 ? "happy" : mood <= 2 ? "low" : "steady";
   return (
-    <div className={`pixel-hero ${expression}`} style={{ "--level-glow": Math.min(1, level / 12) }}>
+    <div
+      className={`pixel-hero image-hero ${expression}`}
+      style={{
+        "--level-glow": Math.min(1, level / 12),
+        "--skin-accent": skin.accent,
+        "--energy-glow": 0.25 + energy * 0.1,
+      }}
+    >
       <div className="pixel-aura" />
-      <div className="pixel-character">
-        <span className="pixel hair hair-left" />
-        <span className="pixel hair hair-right" />
-        <span className="pixel head" />
-        <span className="pixel eye eye-left" />
-        <span className="pixel eye eye-right" />
-        <span className="pixel mouth" />
-        <span className="pixel neck" />
-        <span className="pixel body" />
-        <span className="pixel scarf" />
-        <span className="pixel arm arm-left" />
-        <span className="pixel arm arm-right" />
-        <span className="pixel hand hand-left" />
-        <span className="pixel hand hand-right" />
-        <span className="pixel leg leg-left" />
-        <span className="pixel leg leg-right" />
-        <span className="pixel boot boot-left" />
-        <span className="pixel boot boot-right" />
-        <span className="pixel energy-core" style={{ opacity: 0.25 + energy * 0.13 }} />
+      <div className="pixel-character skin-character">
+        <img src={skin.image} alt={skin.name} />
+        <span className="skin-sheen" />
+        <span className="energy-core image-core" />
       </div>
     </div>
   );
@@ -1289,6 +1493,88 @@ function QuestCard({ icon: Icon, title, value, detail, progress, onClick }) {
         <span style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
       </span>
     </button>
+  );
+}
+
+function SkinShop({ coins, ownedSkinIds, equippedSkinId, buySkin, equipSkin }) {
+  const ownedSet = new Set(ownedSkinIds);
+  return (
+    <section className="shop-layout">
+      <section className="shop-hero glass">
+        <div>
+          <p className="eyebrow">SKIN SHOP</p>
+          <h2>像素衣柜</h2>
+          <p>用今天的任务、专注和习惯，把角色一点点养成你喜欢的样子。</p>
+        </div>
+        <div className="wallet-card">
+          <Coins size={24} />
+          <span>当前金币</span>
+          <strong>{coins}</strong>
+        </div>
+        <div className="wallet-card">
+          <Shirt size={24} />
+          <span>已拥有</span>
+          <strong>{ownedSkinIds.length}/{skins.length}</strong>
+        </div>
+      </section>
+
+      <section className="skin-grid">
+        {skins.map((skin) => {
+          const owned = ownedSet.has(skin.id);
+          const equipped = equippedSkinId === skin.id;
+          const canBuy = coins >= skin.price;
+          const rarity = rarityMeta[skin.rarity];
+          return (
+            <article
+              className={`skin-card glass ${owned ? "owned" : "locked"} ${equipped ? "equipped" : ""}`}
+              key={skin.id}
+              style={{ "--skin-accent": skin.accent, "--rarity-tone": rarity.tone }}
+            >
+              <div className="skin-card-stage">
+                <span className="rarity-badge">{rarity.label}</span>
+                {equipped && <span className="equipped-badge">使用中</span>}
+                {!owned && (
+                  <span className="lock-badge">
+                    <LockKeyhole size={15} />
+                  </span>
+                )}
+                <img src={skin.image} alt={skin.name} />
+                <span className="skin-card-shadow" />
+              </div>
+              <div className="skin-card-body">
+                <div>
+                  <h3>{skin.name}</h3>
+                  <p>{skin.title}</p>
+                </div>
+                <strong className="price-tag">
+                  <Coins size={16} />
+                  {skin.price}
+                </strong>
+              </div>
+              {equipped ? (
+                <button className="ghost-button" disabled>
+                  <Check size={17} />
+                  已装备
+                </button>
+              ) : owned ? (
+                <button className="primary-button" onClick={() => equipSkin(skin.id)}>
+                  <Shirt size={17} />
+                  装备
+                </button>
+              ) : (
+                <button
+                  className={canBuy ? "primary-button" : "ghost-button"}
+                  onClick={() => buySkin(skin.id)}
+                >
+                  {canBuy ? <ShoppingBag size={17} /> : <LockKeyhole size={17} />}
+                  {canBuy ? "购买" : "金币不足"}
+                </button>
+              )}
+            </article>
+          );
+        })}
+      </section>
+    </section>
   );
 }
 

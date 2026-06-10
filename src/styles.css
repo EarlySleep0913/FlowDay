@@ -197,12 +197,49 @@ button {
   font-weight: 700;
 }
 
+.topbar-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.coin-pill {
+  color: #6c4a08;
+  background: rgba(255, 230, 167, 0.72);
+}
+
+.reward-toast {
+  position: fixed;
+  top: 26px;
+  right: 28px;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 999px;
+  color: #17414a;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 18px 50px rgba(47, 106, 117, 0.18);
+  backdrop-filter: blur(18px);
+  font-weight: 900;
+  animation: rewardPop 1.8s ease both;
+}
+
+.reward-toast.coin {
+  color: #724f0b;
+  background: rgba(255, 236, 177, 0.88);
+}
+
 .view-tabs {
   position: sticky;
   top: 14px;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
   margin: 18px 0;
   padding: 8px;
@@ -651,6 +688,105 @@ textarea:focus-visible {
   box-shadow: 0 0 18px #72e5db;
 }
 
+.image-hero {
+  --skin-accent: #2aa99b;
+  --energy-glow: 0.6;
+  width: min(320px, 78vw);
+  height: min(360px, 88vw);
+  transform: rotateX(6deg) rotateY(-10deg) rotateZ(1deg);
+}
+
+.image-hero .pixel-aura {
+  inset: 2% 0 8%;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--skin-accent), transparent 72%), transparent 66%),
+    radial-gradient(circle at 50% 58%, rgba(255, 255, 255, 0.72), transparent 54%);
+  filter: blur(3px);
+}
+
+.skin-character {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform: translateZ(34px);
+  filter:
+    drop-shadow(14px 22px 0 rgba(23, 62, 72, 0.12))
+    drop-shadow(0 20px 34px color-mix(in srgb, var(--skin-accent), transparent 72%));
+}
+
+.skin-character::before {
+  position: absolute;
+  inset: 12% 17% 3%;
+  z-index: -1;
+  content: "";
+  border-radius: 45% 55% 42% 58%;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.5), color-mix(in srgb, var(--skin-accent), transparent 74%)),
+    radial-gradient(circle at 35% 24%, rgba(255, 255, 255, 0.6), transparent 36%);
+  opacity: 0.8;
+  transform: translateZ(-16px) rotate(-8deg);
+}
+
+.skin-character img {
+  position: relative;
+  z-index: 1;
+  width: min(340px, 82vw);
+  max-height: 100%;
+  object-fit: contain;
+  image-rendering: auto;
+  transform: translateY(2px) translateZ(22px);
+  animation: skinFloat 3.4s ease-in-out infinite;
+}
+
+.skin-sheen {
+  position: absolute;
+  inset: 8% 18% 9%;
+  z-index: 2;
+  border-radius: 42% 58% 48% 52%;
+  background: linear-gradient(105deg, transparent 8%, rgba(255, 255, 255, 0.32) 38%, transparent 54%);
+  mix-blend-mode: screen;
+  opacity: 0.62;
+  transform: translateX(-18%) rotate(-6deg);
+  animation: skinSheen 5.8s ease-in-out infinite;
+}
+
+.image-core {
+  left: 50%;
+  top: 56%;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--skin-accent), white 45%);
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--skin-accent), white 18%),
+    0 0 42px color-mix(in srgb, var(--skin-accent), transparent 28%);
+  opacity: var(--energy-glow);
+  transform: translate(-50%, -50%) translateZ(60px);
+}
+
+.skin-nameplate {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: min(320px, 100%);
+  padding: 12px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 18px;
+  color: #183941;
+  background: rgba(255, 255, 255, 0.52);
+  box-shadow: 0 16px 36px rgba(32, 91, 102, 0.12);
+}
+
+.skin-nameplate span {
+  color: #628085;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.skin-nameplate strong {
+  font-size: 1.12rem;
+}
+
 .status-crystals {
   display: flex;
   flex-wrap: wrap;
@@ -714,6 +850,237 @@ textarea:focus-visible {
 .quest-detail {
   color: #5d7a7e;
   line-height: 1.55;
+}
+
+.shop-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.shop-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px 190px;
+  gap: 16px;
+  align-items: stretch;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 24px;
+}
+
+.shop-hero::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.48), transparent 38%),
+    repeating-linear-gradient(90deg, rgba(36, 96, 108, 0.035) 0 1px, transparent 1px 22px);
+}
+
+.shop-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.shop-hero h2 {
+  margin: 0;
+  color: #10282f;
+  font-size: clamp(2rem, 5vw, 4.2rem);
+  line-height: 1;
+}
+
+.shop-hero p {
+  max-width: 650px;
+  margin: 12px 0 0;
+  color: #315a62;
+  line-height: 1.75;
+}
+
+.wallet-card {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 8px;
+  min-height: 128px;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 22px;
+  color: #17414a;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.68);
+  font-weight: 900;
+}
+
+.wallet-card:first-of-type {
+  color: #76520d;
+  background: rgba(255, 230, 164, 0.52);
+}
+
+.wallet-card span {
+  color: #668388;
+  font-size: 0.8rem;
+}
+
+.wallet-card strong {
+  font-size: 2rem;
+}
+
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.skin-card {
+  --skin-accent: #2aa99b;
+  --rarity-tone: #37a092;
+  position: relative;
+  display: grid;
+  gap: 14px;
+  min-height: 390px;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: 14px;
+  transition:
+    transform 220ms ease,
+    box-shadow 220ms ease,
+    border-color 220ms ease,
+    filter 220ms ease;
+}
+
+.skin-card::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 50% 24%, color-mix(in srgb, var(--skin-accent), transparent 72%), transparent 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 46%);
+  opacity: 0.9;
+}
+
+.skin-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 28px 80px rgba(35, 91, 104, 0.18);
+}
+
+.skin-card.equipped {
+  border-color: color-mix(in srgb, var(--skin-accent), white 35%);
+}
+
+.skin-card.locked {
+  filter: saturate(0.86);
+}
+
+.skin-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.skin-card-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 230px;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 76%, rgba(255, 255, 255, 0.78), transparent 38%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.58), color-mix(in srgb, var(--skin-accent), transparent 84%));
+  transform-style: preserve-3d;
+}
+
+.skin-card-stage img {
+  position: relative;
+  z-index: 2;
+  width: min(190px, 78%);
+  height: 210px;
+  object-fit: contain;
+  filter:
+    drop-shadow(8px 14px 0 rgba(30, 65, 72, 0.1))
+    drop-shadow(0 16px 22px color-mix(in srgb, var(--skin-accent), transparent 80%));
+  transform: translateZ(22px);
+  transition: transform 220ms ease;
+}
+
+.skin-card:hover .skin-card-stage img {
+  transform: translateZ(22px) translateY(-6px) scale(1.03);
+}
+
+.skin-card-shadow {
+  position: absolute;
+  bottom: 24px;
+  width: 54%;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(26, 70, 78, 0.2), transparent 72%);
+  filter: blur(6px);
+}
+
+.rarity-badge,
+.equipped-badge,
+.lock-badge {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.rarity-badge {
+  left: 12px;
+  top: 12px;
+  padding: 0 10px;
+  color: #fff;
+  background: var(--rarity-tone);
+}
+
+.equipped-badge {
+  right: 12px;
+  top: 12px;
+  padding: 0 10px;
+  color: #17414a;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.lock-badge {
+  right: 12px;
+  bottom: 12px;
+  justify-content: center;
+  width: 34px;
+  color: #46666c;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.skin-card-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skin-card-body h3 {
+  margin: 0 0 4px;
+  color: #14343c;
+  font-size: 1.05rem;
+}
+
+.skin-card-body p {
+  margin: 0;
+  color: #668388;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.price-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  color: #7b5208;
 }
 
 .panel {
@@ -1604,6 +1971,24 @@ input[type="range"] {
   }
 }
 
+@keyframes rewardPop {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+
+  14%,
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+}
+
 @keyframes spinGlow {
   to {
     transform: rotate(360deg);
@@ -1618,6 +2003,34 @@ input[type="range"] {
 
   50% {
     transform: rotateX(7deg) rotateY(-12deg) rotateZ(1deg) translateY(-8px);
+  }
+}
+
+@keyframes skinFloat {
+  0%,
+  100% {
+    transform: translateY(2px) translateZ(22px);
+  }
+
+  50% {
+    transform: translateY(-9px) translateZ(22px);
+  }
+}
+
+@keyframes skinSheen {
+  0%,
+  58% {
+    opacity: 0;
+    transform: translateX(-38%) rotate(-6deg);
+  }
+
+  72% {
+    opacity: 0.7;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(46%) rotate(-6deg);
   }
 }
 
@@ -1683,12 +2096,17 @@ input[type="range"] {
   .timer-layout,
   .stats-layout,
   .account-layout,
-  .game-hero {
+  .game-hero,
+  .shop-hero {
     grid-template-columns: 1fr;
   }
 
   .game-hero {
     min-height: auto;
+  }
+
+  .shop-hero {
+    padding: 20px;
   }
 
   .quest-grid {
@@ -1730,7 +2148,7 @@ input[type="range"] {
   }
 
   .view-tabs {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .view-tabs button {
@@ -1758,6 +2176,10 @@ input[type="range"] {
     font-size: 2.4rem;
   }
 
+  .topbar-pills {
+    justify-content: flex-start;
+  }
+
   .level-card {
     grid-template-columns: 1fr;
   }
@@ -1769,6 +2191,23 @@ input[type="range"] {
 
   .pixel-hero {
     --px: 11px;
+  }
+
+  .image-hero {
+    width: min(280px, 76vw);
+    height: min(320px, 84vw);
+  }
+
+  .skin-character img {
+    width: min(285px, 78vw);
+  }
+
+  .shop-hero h2 {
+    font-size: 2.5rem;
+  }
+
+  .skin-grid {
+    grid-template-columns: 1fr;
   }
 
   .task-item {
