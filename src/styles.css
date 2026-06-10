@@ -2192,7 +2192,7 @@ input[type="range"] {
 
 .admin-user-row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(140px, 1fr) 130px auto minmax(130px, 0.9fr) auto auto;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   align-items: center;
   gap: 10px;
   padding: 12px;
@@ -2208,6 +2208,7 @@ input[type="range"] {
   display: flex;
   align-items: center;
   gap: 10px;
+  grid-column: span 2;
   min-width: 0;
   color: #224a52;
 }
@@ -2229,6 +2230,27 @@ input[type="range"] {
   color: #6b8589;
   font-size: 0.82rem;
   font-weight: 800;
+}
+
+.admin-coin-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid rgba(75, 125, 132, 0.18);
+  border-radius: 14px;
+  color: #7b5208;
+  background: rgba(255, 241, 194, 0.5);
+}
+
+.admin-coin-field input {
+  min-height: 38px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 900;
 }
 
 .history-day {
@@ -2797,6 +2819,10 @@ input[type="range"] {
   .admin-create-form,
   .admin-user-row {
     grid-template-columns: 1fr;
+  }
+
+  .admin-user-title {
+    grid-column: auto;
   }
 
   .wide-panel,

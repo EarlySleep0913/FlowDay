@@ -7,12 +7,24 @@ export async function onRequestGet(context) {
   if (auth.response) return auth.response;
 
   const result = await context.env.DB.prepare(
-    `SELECT id, username, display_name, role, disabled, created_at, updated_at
+    `SELECT users.id, users.username, users.display_name, users.role, users.disabled,
+            users.created_at, users.updated_at, flow_state.data AS state_data
        FROM users
+       LEFT JOIN flow_state ON flow_state.user_id = users.id
       ORDER BY created_at DESC`
   ).all();
 
-  return json({ users: (result.results || []).map(publicUser) });
+  const users = (result.results || []).map((row) => {
+    let coins = 0;
+    try {
+      coins = Math.max(0, Number(JSON.parse(row.state_data || "{}")?.wallet?.coins) || 0);
+    } catch {
+      coins = 0;
+    }
+    return { ...publicUser(row), coins };
+  });
+
+  return json({ users });
 }
 
 export async function onRequestPost(context) {

@@ -608,6 +608,21 @@ function App() {
         method: "PATCH",
         body: JSON.stringify(patch),
       });
+      if (
+        userId === currentUser?.id &&
+        Object.prototype.hasOwnProperty.call(patch, "coins") &&
+        Number.isFinite(Number(patch.coins))
+      ) {
+        const normalizedCoins = Math.max(0, Math.floor(Number(patch.coins)));
+        setState((current) => ({
+          ...current,
+          wallet: {
+            ...(current.wallet || {}),
+            coins: normalizedCoins,
+            lifetimeCoins: Math.max(Number(current.wallet?.lifetimeCoins) || 0, normalizedCoins),
+          },
+        }));
+      }
       await refreshAdminUsers();
       setAuthMessage("账号已更新。");
     } catch (error) {
@@ -2130,14 +2145,16 @@ function AccountPanel({
 function AdminUserRow({ user, currentUser, updateAdminUser, disableAdminUser }) {
   const [displayName, setDisplayName] = useState(user.displayName);
   const [role, setRole] = useState(user.role);
+  const [coins, setCoins] = useState(user.coins ?? 0);
   const [password, setPassword] = useState("");
   const isSelf = user.id === currentUser.id;
 
   useEffect(() => {
     setDisplayName(user.displayName);
     setRole(user.role);
+    setCoins(user.coins ?? 0);
     setPassword("");
-  }, [user.id, user.displayName, user.role]);
+  }, [user.id, user.displayName, user.role, user.coins]);
 
   return (
     <article className={`admin-user-row ${user.disabled ? "disabled" : ""}`}>
@@ -2160,6 +2177,25 @@ function AdminUserRow({ user, currentUser, updateAdminUser, disableAdminUser }) 
       >
         <Save size={16} />
         保存
+      </button>
+
+      <label className="admin-coin-field">
+        <Coins size={16} />
+        <input
+          type="number"
+          min="0"
+          max="9999999"
+          value={coins}
+          onChange={(event) => setCoins(event.target.value)}
+          aria-label={`${user.username} 金币数量`}
+        />
+      </label>
+      <button
+        className="ghost-button"
+        onClick={() => updateAdminUser(user.id, { coins: Number(coins) })}
+      >
+        <Coins size={16} />
+        改金币
       </button>
 
       <input
