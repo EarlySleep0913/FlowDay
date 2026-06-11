@@ -256,6 +256,8 @@ button {
 .app-shell[data-theme="dark"] .topbar h1,
 .app-shell[data-theme="dark"] .panel h2,
 .app-shell[data-theme="dark"] .game-copy h2,
+.app-shell[data-theme="dark"] .diary-hero h2,
+.app-shell[data-theme="dark"] .diary-main h3,
 .app-shell[data-theme="dark"] .shop-hero h2,
 .app-shell[data-theme="dark"] .skin-card-body h3,
 .app-shell[data-theme="dark"] .metric strong,
@@ -288,6 +290,12 @@ button {
 
 .app-shell[data-theme="dark"] .date-pill,
 .app-shell[data-theme="dark"] .metric,
+.app-shell[data-theme="dark"] .emoji-picker,
+.app-shell[data-theme="dark"] .emoji-current,
+.app-shell[data-theme="dark"] .emoji-options button,
+.app-shell[data-theme="dark"] .diary-count,
+.app-shell[data-theme="dark"] .diary-emoji,
+.app-shell[data-theme="dark"] .diary-meta span,
 .app-shell[data-theme="dark"] .ghost-button,
 .app-shell[data-theme="dark"] .icon-button,
 .app-shell[data-theme="dark"] .status-crystals span,
@@ -604,7 +612,7 @@ button {
   top: 14px;
   z-index: 5;
   display: grid;
-  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-template-columns: repeat(9, minmax(0, 1fr));
   gap: 8px;
   margin: 18px 0;
   padding: 8px;
@@ -1435,6 +1443,93 @@ textarea:focus-visible {
   line-height: 1.55;
 }
 
+.diary-layout {
+  display: grid;
+  gap: 18px;
+}
+
+.diary-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.diary-hero h2 {
+  margin: 0 0 8px;
+  color: #10282f;
+  font-size: clamp(2rem, 5vw, 4.4rem);
+  line-height: 1;
+}
+
+.diary-count {
+  display: grid;
+  place-items: center;
+  min-width: 128px;
+  min-height: 128px;
+  border-radius: 28px;
+  color: #17414a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.diary-count strong {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.diary-count span {
+  color: #668388;
+  font-weight: 900;
+}
+
+.diary-list {
+  display: grid;
+  gap: 12px;
+}
+
+.diary-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 132px;
+  border-radius: 22px;
+  padding: 16px;
+}
+
+.diary-emoji {
+  display: grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.58);
+  font-size: 2.3rem;
+}
+
+.diary-main h3 {
+  margin: 0 0 10px;
+  color: #14343c;
+  font-size: 1.15rem;
+  line-height: 1.45;
+}
+
+.diary-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.diary-meta span {
+  min-height: 30px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #315a62;
+  background: rgba(255, 255, 255, 0.46);
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
 .earlysleep-layout {
   display: grid;
   gap: 18px;
@@ -1692,7 +1787,7 @@ textarea:focus-visible {
 
 .sleep-history-item {
   display: grid;
-  grid-template-columns: minmax(160px, 0.8fr) minmax(120px, 0.6fr) minmax(180px, 1fr);
+  grid-template-columns: minmax(160px, 0.8fr) minmax(120px, 0.6fr) minmax(180px, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 13px 14px;
@@ -1705,6 +1800,40 @@ textarea:focus-visible {
 
 .sleep-history-item strong {
   color: #14343c;
+}
+
+.sleep-history-item.editing {
+  grid-template-columns: repeat(2, minmax(180px, 1fr)) auto;
+}
+
+.sleep-history-item label {
+  display: grid;
+  gap: 6px;
+  color: #668388;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.record-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.editable-record,
+.editing-record {
+  gap: 8px;
+}
+
+.editing-record {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) repeat(2, minmax(170px, 1fr)) auto auto;
+  width: 100%;
+}
+
+.editing-record input {
+  min-height: 36px;
 }
 
 .app-shell[data-theme="dark"] .sleep-copy h2,
@@ -2083,6 +2212,50 @@ input[type="range"] {
   margin: 18px 0;
   color: #315a62;
   line-height: 1.7;
+}
+
+.emoji-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  margin: 16px 0 4px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.36);
+}
+
+.emoji-current {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.62);
+  font-size: 1.8rem;
+}
+
+.emoji-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.emoji-options button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.42);
+  font-size: 1.1rem;
+}
+
+.emoji-options button.active {
+  background: rgba(123, 220, 203, 0.46);
+  box-shadow: 0 0 0 3px rgba(34, 166, 157, 0.16);
 }
 
 .metric-row {
@@ -3445,7 +3618,7 @@ input[type="range"] {
   }
 
   .view-tabs {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(9, minmax(0, 1fr));
   }
 
   .view-tabs button {
@@ -3459,6 +3632,7 @@ input[type="range"] {
   .sliders,
   .metric-row,
   .sleep-status-row,
+  .emoji-picker,
   .account-summary,
   .account-actions,
   .quest-grid,
@@ -3476,6 +3650,21 @@ input[type="range"] {
 
   .sleep-history-item {
     grid-template-columns: 1fr;
+  }
+
+  .sleep-history-item.editing,
+  .editing-record,
+  .diary-card,
+  .diary-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .diary-hero {
+    display: grid;
+  }
+
+  .record-actions {
+    justify-content: flex-start;
   }
 
   .game-copy h2 {

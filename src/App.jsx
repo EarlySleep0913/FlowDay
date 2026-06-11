@@ -58,6 +58,7 @@ const HABIT_COIN_REWARD = 12;
 const FOCUS_COIN_UNIT_SECONDS = 5 * 60;
 const FOCUS_COIN_REWARD = 8;
 const AVATAR_EFFECT_TYPES = ["standee", "pulse", "hop", "sparkle", "shake"];
+const DAILY_EMOJIS = ["🌤️", "😊", "😌", "🔥", "🌧️", "🌙", "🌱", "✨", "😴", "🧠", "💪", "🍵"];
 const DEFAULT_APPEARANCE = {
   backgroundId: "theme",
   backgroundBlur: 8,
@@ -69,6 +70,20 @@ const DEFAULT_SLEEP_LOG = {
   lastSleepAt: null,
   lastWakeAt: null,
   sessions: [],
+};
+const DEFAULT_TIMER_STATE = {
+  running: false,
+  paused: false,
+  elapsed: 0,
+  remaining: 25 * 60,
+  startedAt: null,
+  activeStartedAt: null,
+  accumulatedSeconds: 0,
+  source: "preset",
+  title: "专注写作",
+  taskId: "",
+  mode: "countdown",
+  plannedSeconds: 25 * 60,
 };
 const BACKGROUNDS = [
   { id: "theme", name: "主题", image: null },
@@ -167,6 +182,20 @@ function formatDateTime(value) {
   });
 }
 
+function toDatetimeLocalValue(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function fromDatetimeLocalValue(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 function getFocusCoinReward(seconds) {
   if (seconds < 60) return 0;
   return Math.max(2, Math.floor(seconds / FOCUS_COIN_UNIT_SECONDS) * FOCUS_COIN_REWARD);
@@ -184,6 +213,34 @@ function getTimerElapsed(timer) {
 function getTimerRemaining(timer, elapsed = getTimerElapsed(timer)) {
   if (timer.mode !== "countdown") return 0;
   return Math.max(0, Math.floor((timer.plannedSeconds || 0) - elapsed));
+}
+
+function normalizeFocusTimer(rawTimer) {
+  const raw = rawTimer && typeof rawTimer === "object" ? rawTimer : {};
+  const plannedSeconds = Math.max(1, Number(raw.plannedSeconds || DEFAULT_TIMER_STATE.plannedSeconds) || 1);
+  const mode = raw.mode === "countup" ? "countup" : "countdown";
+  const running = Boolean(raw.running && raw.startedAt);
+  const paused = Boolean(raw.paused);
+  const activeStartedAt = running && !paused ? Number(raw.activeStartedAt) || Date.now() : null;
+  const accumulatedSeconds = Math.max(0, Math.floor(Number(raw.accumulatedSeconds ?? raw.elapsed) || 0));
+  const timer = {
+    ...DEFAULT_TIMER_STATE,
+    ...raw,
+    mode,
+    running,
+    paused,
+    plannedSeconds,
+    activeStartedAt,
+    accumulatedSeconds,
+    elapsed: Math.max(0, Math.floor(Number(raw.elapsed ?? accumulatedSeconds) || 0)),
+    remaining: mode === "countdown" ? Math.max(0, Number(raw.remaining ?? plannedSeconds) || 0) : 0,
+  };
+  const elapsed = getTimerElapsed(timer);
+  return {
+    ...timer,
+    elapsed,
+    remaining: getTimerRemaining(timer, elapsed),
+  };
 }
 
 function emptyState() {
@@ -234,8 +291,9 @@ function emptyState() {
       },
     ],
     daily: {
-      [date]: { mood: 4, energy: 3, note: "" },
+      [date]: { mood: 4, energy: 3, note: "", emoji: "🌤️" },
     },
+    focusTimer: DEFAULT_TIMER_STATE,
     wallet: {
       coins: 120,
       lifetimeCoins: 120,
@@ -275,6 +333,19 @@ function normalizeState(rawState) {
     : [];
   const sleepStatus =
     rawSleepLog.status === "sleeping" && rawSleepLog.activeSleepAt ? "sleeping" : "awake";
+  const rawDaily = raw.daily && typeof raw.daily === "object" ? raw.daily : base.daily;
+  const daily = Object.fromEntries(
+    Object.entries(rawDaily).map(([date, value]) => [
+      date,
+      {
+        mood: 3,
+        energy: 3,
+        note: "",
+        emoji: "🌤️",
+        ...(value && typeof value === "object" ? value : {}),
+      },
+    ])
+  );
 
   return {
     ...base,
@@ -282,7 +353,8 @@ function normalizeState(rawState) {
     tasks: Array.isArray(raw.tasks) ? raw.tasks : base.tasks,
     sessions: Array.isArray(raw.sessions) ? raw.sessions : base.sessions,
     habits: Array.isArray(raw.habits) ? raw.habits : base.habits,
-    daily: raw.daily && typeof raw.daily === "object" ? raw.daily : base.daily,
+    daily,
+    focusTimer: normalizeFocusTimer(raw.focusTimer || base.focusTimer),
     wallet: {
       ...base.wallet,
       ...(raw.wallet || {}),
@@ -396,20 +468,7 @@ function App() {
   const [timerTaskId, setTimerTaskId] = useState("");
   const [presetTitle, setPresetTitle] = useState("专注写作");
   const [durationMinutes, setDurationMinutes] = useState(25);
-  const [timer, setTimer] = useState({
-    running: false,
-    paused: false,
-    elapsed: 0,
-    remaining: 25 * 60,
-    startedAt: null,
-    activeStartedAt: null,
-    accumulatedSeconds: 0,
-    source: "preset",
-    title: "专注写作",
-    taskId: "",
-    mode: "countdown",
-    plannedSeconds: 25 * 60,
-  });
+  const [timer, setTimer] = useState(DEFAULT_TIMER_STATE);
   const savedTimerStartRef = useRef(null);
   const [rangeStart, setRangeStart] = useState(shiftDate(todayKey(), -6));
   const [rangeEnd, setRangeEnd] = useState(todayKey());
@@ -517,6 +576,20 @@ function App() {
     return () => window.removeEventListener("focus", handleFocusSync);
   }, [currentUser?.id, cloudReady]);
 
+  useEffect(() => {
+    const syncedTimer = normalizeFocusTimer(state.focusTimer);
+    setTimer(syncedTimer);
+    setTimerMode(syncedTimer.mode);
+    setTimerSource(syncedTimer.source);
+    setTimerTaskId(syncedTimer.taskId || "");
+    if (syncedTimer.source === "preset") {
+      setPresetTitle(syncedTimer.title);
+    }
+    if (syncedTimer.mode === "countdown") {
+      setDurationMinutes(Math.max(1, Math.round((syncedTimer.plannedSeconds || 60) / 60)));
+    }
+  }, [state.focusTimer]);
+
   const tasksForDate = useMemo(
     () => state.tasks.filter((task) => task.date === selectedDate),
     [state.tasks, selectedDate]
@@ -527,7 +600,7 @@ function App() {
     [state.tasks]
   );
 
-  const daily = state.daily[selectedDate] || { mood: 3, energy: 3, note: "" };
+  const daily = state.daily[selectedDate] || { mood: 3, energy: 3, note: "", emoji: "🌤️" };
   const completedCount = tasksForDate.filter((task) => task.done).length;
   const advice = getAdvice(daily.mood, daily.energy, completedCount, tasksForDate.length);
   const totalFocusToday = state.sessions
@@ -808,8 +881,16 @@ function App() {
       ...current,
       daily: {
         ...current.daily,
-        [date]: { mood: 3, energy: 3, note: "", ...current.daily[date], ...patch },
+        [date]: { mood: 3, energy: 3, note: "", emoji: "🌤️", ...current.daily[date], ...patch },
       },
+    }));
+  }
+
+  function persistFocusTimer(nextTimer) {
+    const normalizedTimer = normalizeFocusTimer(nextTimer);
+    setState((current) => ({
+      ...current,
+      focusTimer: normalizedTimer,
     }));
   }
 
@@ -867,6 +948,97 @@ function App() {
       ...current,
       tasks: current.tasks.filter((task) => task.id !== taskId),
     }));
+  }
+
+  function updateFocusSession(sessionId, patch) {
+    setState((current) => {
+      const previous = current.sessions.find((session) => session.id === sessionId);
+      if (!previous) return current;
+      const startedAt = patch.startedAt || previous.startedAt;
+      const endedAt = patch.endedAt || previous.endedAt;
+      const computedSeconds =
+        startedAt && endedAt
+          ? Math.max(0, Math.floor((new Date(endedAt).getTime() - new Date(startedAt).getTime()) / 1000))
+          : previous.durationSeconds;
+      const durationSeconds = Math.max(0, Number(patch.durationSeconds ?? computedSeconds) || 0);
+      const nextSession = {
+        ...previous,
+        ...patch,
+        startedAt,
+        endedAt,
+        durationSeconds,
+        date: patch.date || (startedAt ? toDateKey(new Date(startedAt)) : previous.date),
+      };
+      const delta = durationSeconds - (previous.durationSeconds || 0);
+      return {
+        ...current,
+        sessions: current.sessions.map((session) => (session.id === sessionId ? nextSession : session)),
+        tasks: current.tasks.map((task) =>
+          task.id === previous.taskId
+            ? { ...task, focusSeconds: Math.max(0, (task.focusSeconds || 0) + delta) }
+            : task
+        ),
+      };
+    });
+  }
+
+  function deleteFocusSession(sessionId) {
+    setState((current) => {
+      const previous = current.sessions.find((session) => session.id === sessionId);
+      if (!previous) return current;
+      return {
+        ...current,
+        sessions: current.sessions.filter((session) => session.id !== sessionId),
+        tasks: current.tasks.map((task) =>
+          task.id === previous.taskId
+            ? { ...task, focusSeconds: Math.max(0, (task.focusSeconds || 0) - (previous.durationSeconds || 0)) }
+            : task
+        ),
+      };
+    });
+  }
+
+  function updateSleepSession(sessionId, patch) {
+    setState((current) => {
+      const sleepLog = { ...DEFAULT_SLEEP_LOG, ...(current.sleepLog || {}) };
+      const sessions = (sleepLog.sessions || []).map((session) => {
+        if (session.id !== sessionId) return session;
+        const sleepAt = patch.sleepAt || session.sleepAt;
+        const wakeAt = patch.wakeAt || session.wakeAt;
+        const durationSeconds = Math.max(
+          0,
+          Math.floor((new Date(wakeAt).getTime() - new Date(sleepAt).getTime()) / 1000)
+        );
+        return {
+          ...session,
+          ...patch,
+          sleepAt,
+          wakeAt,
+          durationSeconds,
+          dateKey: toDateKey(new Date(sleepAt)),
+        };
+      });
+      return {
+        ...current,
+        sleepLog: {
+          ...sleepLog,
+          sessions,
+        },
+      };
+    });
+  }
+
+  function deleteSleepSession(sessionId) {
+    setState((current) => {
+      const sleepLog = { ...DEFAULT_SLEEP_LOG, ...(current.sleepLog || {}) };
+      return {
+        ...current,
+        sleepLog: {
+          ...sleepLog,
+          sessions: (sleepLog.sessions || []).filter((session) => session.id !== sessionId),
+        },
+      };
+    });
   }
 
   function addHabit(event) {
@@ -931,7 +1103,7 @@ function App() {
         : COUNTUP_PROGRESS_SECONDS;
     const startedAt = new Date().toISOString();
     savedTimerStartRef.current = null;
-    setTimer({
+    const nextTimer = {
       running: true,
       paused: false,
       elapsed: 0,
@@ -944,7 +1116,9 @@ function App() {
       taskId: usingTask ? task.id : "",
       mode: timerMode,
       plannedSeconds,
-    });
+    };
+    setTimer(nextTimer);
+    persistFocusTimer(nextTimer);
   }
 
   function finishTimer() {
@@ -981,11 +1155,11 @@ function App() {
       ),
     }));
 
-    setTimer((current) => ({
+    const resetTimerState = {
       running: false,
       paused: false,
       elapsed: 0,
-      remaining: timerMode === "countdown" ? current.plannedSeconds : 0,
+      remaining: timerMode === "countdown" ? timer.plannedSeconds : 0,
       startedAt: null,
       activeStartedAt: null,
       accumulatedSeconds: 0,
@@ -993,8 +1167,10 @@ function App() {
       title: presetTitle,
       taskId: timerTaskId,
       mode: timerMode,
-      plannedSeconds: current.plannedSeconds,
-    }));
+      plannedSeconds: timer.plannedSeconds,
+    };
+    setTimer(resetTimerState);
+    persistFocusTimer(resetTimerState);
     if (earnedCoins) showRewardNotice(earnedCoins, "专注完成");
   }
 
@@ -1004,7 +1180,7 @@ function App() {
         ? Math.max(1, Number(durationMinutes) || 1) * 60
         : COUNTUP_PROGRESS_SECONDS;
     savedTimerStartRef.current = null;
-    setTimer({
+    const nextTimer = {
       running: false,
       paused: false,
       elapsed: 0,
@@ -1017,7 +1193,9 @@ function App() {
       taskId: timerTaskId,
       mode: timerMode,
       plannedSeconds,
-    });
+    };
+    setTimer(nextTimer);
+    persistFocusTimer(nextTimer);
   }
 
   function changeTimerMode(mode) {
@@ -1036,6 +1214,15 @@ function App() {
       activeStartedAt: null,
       accumulatedSeconds: 0,
     }));
+    persistFocusTimer({
+      ...timer,
+      mode,
+      plannedSeconds,
+      elapsed: 0,
+      remaining: mode === "countdown" ? plannedSeconds : 0,
+      activeStartedAt: null,
+      accumulatedSeconds: 0,
+    });
   }
 
   function changeDurationMinutes(value) {
@@ -1047,28 +1234,37 @@ function App() {
       plannedSeconds,
       remaining: plannedSeconds,
     }));
+    persistFocusTimer({
+      ...timer,
+      plannedSeconds,
+      remaining: plannedSeconds,
+    });
   }
 
   function toggleTimerPause() {
     setTimer((current) => {
       if (!current.running) return current;
       const elapsed = getTimerElapsed(current);
+      let nextTimer;
       if (current.paused) {
-        return {
+        nextTimer = {
           ...current,
           paused: false,
           activeStartedAt: Date.now(),
           accumulatedSeconds: elapsed,
         };
+      } else {
+        nextTimer = {
+          ...current,
+          paused: true,
+          elapsed,
+          remaining: getTimerRemaining(current, elapsed),
+          activeStartedAt: null,
+          accumulatedSeconds: elapsed,
+        };
       }
-      return {
-        ...current,
-        paused: true,
-        elapsed,
-        remaining: getTimerRemaining(current, elapsed),
-        activeStartedAt: null,
-        accumulatedSeconds: elapsed,
-      };
+      persistFocusTimer(nextTimer);
+      return nextTimer;
     });
   }
 
@@ -1187,6 +1383,7 @@ function App() {
         <TabButton icon={BedDouble} label="EarlySleep" active={activeView === "earlysleep"} onClick={() => setActiveView("earlysleep")} />
         <TabButton icon={ShoppingBag} label="商店" active={activeView === "shop"} onClick={() => setActiveView("shop")} />
         <TabButton icon={BarChart3} label="统计" active={activeView === "stats"} onClick={() => setActiveView("stats")} />
+        <TabButton icon={HeartPulse} label="情绪日记" active={activeView === "diary"} onClick={() => setActiveView("diary")} />
         <TabButton icon={History} label="历史" active={activeView === "history"} onClick={() => setActiveView("history")} />
         <TabButton icon={UserCog} label="账号" active={activeView === "account"} onClick={() => setActiveView("account")} />
       </nav>
@@ -1194,7 +1391,7 @@ function App() {
       {activeView === "home" && (
         <GameHome
           stats={gameStats}
-          daily={state.daily[todayKey()] || { mood: 3, energy: 3, note: "" }}
+          daily={state.daily[todayKey()] || { mood: 3, energy: 3, note: "", emoji: "🌤️" }}
           currentUser={currentUser}
           equippedSkin={equippedSkin}
           coins={state.wallet?.coins || 0}
@@ -1248,6 +1445,23 @@ function App() {
                   onChange={(event) => patchDaily(selectedDate, { energy: Number(event.target.value) })}
                 />
               </label>
+            </div>
+
+            <div className="emoji-picker">
+              <span className="emoji-current">{daily.emoji || "🌤️"}</span>
+              <div className="emoji-options">
+                {DAILY_EMOJIS.map((emoji) => (
+                  <button
+                    className={daily.emoji === emoji ? "active" : ""}
+                    key={emoji}
+                    onClick={() => patchDaily(selectedDate, { emoji })}
+                    type="button"
+                    aria-label={`选择 ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <p className="advice-copy">{advice.text}</p>
@@ -1468,7 +1682,11 @@ function App() {
         <EarlySleepPage
           sleepLog={sleepLog}
           sleepStats={sleepStats}
+          appearance={appearance}
+          patchAppearance={patchAppearance}
           toggleSleepCheckIn={toggleSleepCheckIn}
+          updateSleepSession={updateSleepSession}
+          deleteSleepSession={deleteSleepSession}
         />
       )}
 
@@ -1531,6 +1749,10 @@ function App() {
         </section>
       )}
 
+      {activeView === "diary" && (
+        <MoodDiaryPage daily={state.daily} setSelectedDate={setSelectedDate} setActiveView={setActiveView} />
+      )}
+
       {activeView === "history" && (
         <section className="panel glass history-panel">
           <div className="panel-heading">
@@ -1539,7 +1761,12 @@ function App() {
               <h2>之前的任务和专注记录</h2>
             </div>
           </div>
-          <HistoryList tasks={state.tasks} sessions={state.sessions} />
+          <HistoryList
+            tasks={state.tasks}
+            sessions={state.sessions}
+            updateFocusSession={updateFocusSession}
+            deleteFocusSession={deleteFocusSession}
+          />
         </section>
       )}
 
@@ -1663,7 +1890,74 @@ function EmptyState({ text }) {
   return <p className="empty-state">{text}</p>;
 }
 
-function EarlySleepPage({ sleepLog, sleepStats, toggleSleepCheckIn }) {
+function MoodDiaryPage({ daily, setSelectedDate, setActiveView }) {
+  const entries = Object.entries(daily || {})
+    .map(([date, value]) => ({
+      date,
+      mood: Number(value?.mood) || 3,
+      energy: Number(value?.energy) || 3,
+      note: value?.note || "",
+      emoji: value?.emoji || "🌤️",
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <section className="diary-layout">
+      <section className="panel glass diary-hero">
+        <div>
+          <p className="eyebrow">MOOD DIARY</p>
+          <h2>情绪日记</h2>
+          <p className="muted">这里展示状态看板里的每日 emoji、心情、精力和备注。</p>
+        </div>
+        <div className="diary-count">
+          <strong>{entries.length}</strong>
+          <span>天记录</span>
+        </div>
+      </section>
+
+      <section className="diary-list">
+        {entries.length === 0 ? (
+          <section className="panel glass">
+            <EmptyState text="还没有情绪日记。" />
+          </section>
+        ) : (
+          entries.map((entry) => (
+            <article className="diary-card glass" key={entry.date}>
+              <div className="diary-emoji">{entry.emoji}</div>
+              <div className="diary-main">
+                <p className="eyebrow">{formatDate(entry.date)}</p>
+                <h3>{entry.note || "这一天还没有备注"}</h3>
+                <div className="diary-meta">
+                  <span>心情 {entry.mood}/5</span>
+                  <span>精力 {entry.energy}/5</span>
+                  <span>状态 {entry.mood + entry.energy}/10</span>
+                </div>
+              </div>
+              <button
+                className="ghost-button compact"
+                onClick={() => {
+                  setSelectedDate(entry.date);
+                  setActiveView("today");
+                }}
+                type="button"
+              >
+                编辑当天
+              </button>
+            </article>
+          ))
+        )}
+      </section>
+    </section>
+  );
+}
+
+function EarlySleepPage({
+  sleepLog,
+  sleepStats,
+  toggleSleepCheckIn,
+  updateSleepSession,
+  deleteSleepSession,
+}) {
   const [nowTick, setNowTick] = useState(Date.now());
   const sleeping = sleepLog.status === "sleeping" && sleepLog.activeSleepAt;
 
@@ -1760,16 +2054,68 @@ function EarlySleepPage({ sleepLog, sleepStats, toggleSleepCheckIn }) {
         ) : (
           <div className="sleep-history-list">
             {sleepStats.sessions.slice(0, 8).map((session) => (
-              <article className="sleep-history-item" key={session.id}>
-                <span>{formatDate(session.dateKey)}</span>
-                <strong>{formatMinutes(session.durationSeconds)}</strong>
-                <span>{formatClockTime(session.sleepAt)} - {formatClockTime(session.wakeAt)}</span>
-              </article>
+              <SleepHistoryItem
+                key={session.id}
+                session={session}
+                updateSleepSession={updateSleepSession}
+                deleteSleepSession={deleteSleepSession}
+              />
             ))}
           </div>
         )}
       </section>
     </section>
+  );
+}
+
+function SleepHistoryItem({ session, updateSleepSession, deleteSleepSession }) {
+  const [editing, setEditing] = useState(false);
+  const [sleepAt, setSleepAt] = useState(toDatetimeLocalValue(session.sleepAt));
+  const [wakeAt, setWakeAt] = useState(toDatetimeLocalValue(session.wakeAt));
+
+  useEffect(() => {
+    if (editing) return;
+    setSleepAt(toDatetimeLocalValue(session.sleepAt));
+    setWakeAt(toDatetimeLocalValue(session.wakeAt));
+  }, [session.sleepAt, session.wakeAt, editing]);
+
+  function save() {
+    const nextSleepAt = fromDatetimeLocalValue(sleepAt);
+    const nextWakeAt = fromDatetimeLocalValue(wakeAt);
+    if (!nextSleepAt || !nextWakeAt) return;
+    updateSleepSession(session.id, { sleepAt: nextSleepAt, wakeAt: nextWakeAt });
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <article className="sleep-history-item editing">
+        <label>
+          <span>入睡</span>
+          <input type="datetime-local" value={sleepAt} onChange={(event) => setSleepAt(event.target.value)} />
+        </label>
+        <label>
+          <span>起床</span>
+          <input type="datetime-local" value={wakeAt} onChange={(event) => setWakeAt(event.target.value)} />
+        </label>
+        <div className="record-actions">
+          <button className="primary-button compact" onClick={save} type="button">保存</button>
+          <button className="ghost-button compact" onClick={() => setEditing(false)} type="button">取消</button>
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <article className="sleep-history-item">
+      <span>{formatDate(session.dateKey)}</span>
+      <strong>{formatMinutes(session.durationSeconds)}</strong>
+      <span>{formatClockTime(session.sleepAt)} - {formatClockTime(session.wakeAt)}</span>
+      <div className="record-actions">
+        <button className="ghost-button compact" onClick={() => setEditing(true)} type="button">修改</button>
+        <button className="text-button compact" onClick={() => deleteSleepSession(session.id)} type="button">删除</button>
+      </div>
+    </article>
   );
 }
 
@@ -2328,7 +2674,7 @@ function SleepTimeline({ data }) {
   );
 }
 
-function HistoryList({ tasks, sessions }) {
+function HistoryList({ tasks, sessions, updateFocusSession, deleteFocusSession }) {
   const dates = [...new Set([...tasks.map((task) => task.date), ...sessions.map((session) => session.date)])].sort((a, b) => b.localeCompare(a));
   if (dates.length === 0) return <EmptyState text="还没有历史数据。" />;
   return (
@@ -2349,15 +2695,64 @@ function HistoryList({ tasks, sessions }) {
                 </span>
               ))}
               {daySessions.map((session) => (
-                <span className="history-chip focus" key={session.id}>
-                  {session.title} · {formatMinutes(session.durationSeconds)}
-                </span>
+                <FocusHistoryItem
+                  key={session.id}
+                  session={session}
+                  updateFocusSession={updateFocusSession}
+                  deleteFocusSession={deleteFocusSession}
+                />
               ))}
             </div>
           </article>
         );
       })}
     </div>
+  );
+}
+
+function FocusHistoryItem({ session, updateFocusSession, deleteFocusSession }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(session.title);
+  const [startedAt, setStartedAt] = useState(toDatetimeLocalValue(session.startedAt));
+  const [endedAt, setEndedAt] = useState(toDatetimeLocalValue(session.endedAt));
+
+  useEffect(() => {
+    if (editing) return;
+    setTitle(session.title);
+    setStartedAt(toDatetimeLocalValue(session.startedAt));
+    setEndedAt(toDatetimeLocalValue(session.endedAt));
+  }, [session.title, session.startedAt, session.endedAt, editing]);
+
+  function save() {
+    const nextStartedAt = fromDatetimeLocalValue(startedAt);
+    const nextEndedAt = fromDatetimeLocalValue(endedAt);
+    if (!title.trim() || !nextStartedAt || !nextEndedAt) return;
+    updateFocusSession(session.id, {
+      title: title.trim(),
+      startedAt: nextStartedAt,
+      endedAt: nextEndedAt,
+    });
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <span className="history-chip focus editing-record">
+        <input value={title} onChange={(event) => setTitle(event.target.value)} />
+        <input type="datetime-local" value={startedAt} onChange={(event) => setStartedAt(event.target.value)} />
+        <input type="datetime-local" value={endedAt} onChange={(event) => setEndedAt(event.target.value)} />
+        <button className="primary-button compact" onClick={save} type="button">保存</button>
+        <button className="ghost-button compact" onClick={() => setEditing(false)} type="button">取消</button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="history-chip focus editable-record">
+      {session.title} · {formatMinutes(session.durationSeconds)}
+      <button className="ghost-button compact" onClick={() => setEditing(true)} type="button">修改</button>
+      <button className="text-button compact" onClick={() => deleteFocusSession(session.id)} type="button">删除</button>
+    </span>
   );
 }
 
