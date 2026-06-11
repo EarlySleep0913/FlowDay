@@ -21,6 +21,7 @@ import {
   LogIn,
   LogOut,
   LockKeyhole,
+  Moon,
   Pause,
   Play,
   Plus,
@@ -35,6 +36,7 @@ import {
   Sparkles,
   Square,
   Star,
+  Sun,
   Target,
   TimerReset,
   Trophy,
@@ -58,6 +60,7 @@ const AVATAR_EFFECT_TYPES = ["standee", "pulse", "hop", "sparkle", "shake"];
 const DEFAULT_APPEARANCE = {
   backgroundId: "theme",
   backgroundBlur: 8,
+  themeMode: "light",
 };
 const BACKGROUNDS = [
   { id: "theme", name: "主题", image: null },
@@ -215,6 +218,11 @@ function emptyState() {
       ownedSkinIds: [DEFAULT_SKIN_ID],
       equippedSkinId: DEFAULT_SKIN_ID,
     },
+    earlySleep: {
+      isSleeping: false,
+      lastSleepAt: null,
+      lastWakeAt: null,
+    },
     appearance: DEFAULT_APPEARANCE,
   };
 }
@@ -238,6 +246,10 @@ function normalizeState(rawState) {
     30,
     Math.max(0, Number(rawAppearance.backgroundBlur ?? DEFAULT_APPEARANCE.backgroundBlur) || 0)
   );
+  const themeMode = rawAppearance.themeMode === "dark" ? "dark" : "light";
+  const rawEarlySleep = raw.earlySleep && typeof raw.earlySleep === "object" ? raw.earlySleep : {};
+  const lastSleepAt = typeof rawEarlySleep.lastSleepAt === "string" ? rawEarlySleep.lastSleepAt : null;
+  const lastWakeAt = typeof rawEarlySleep.lastWakeAt === "string" ? rawEarlySleep.lastWakeAt : null;
 
   return {
     ...base,
@@ -259,9 +271,15 @@ function normalizeState(rawState) {
       ownedSkinIds,
       equippedSkinId,
     },
+    earlySleep: {
+      isSleeping: Boolean(rawEarlySleep.isSleeping),
+      lastSleepAt,
+      lastWakeAt,
+    },
     appearance: {
       backgroundId,
       backgroundBlur,
+      themeMode,
     },
   };
 }
@@ -502,6 +520,7 @@ function App() {
   const equippedSkin = getSkin(state.inventory?.equippedSkinId);
   const ownedSkinIds = state.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
   const appearance = { ...DEFAULT_APPEARANCE, ...(state.appearance || {}) };
+  const themeMode = appearance.themeMode === "dark" ? "dark" : "light";
   const selectedBackground =
     BACKGROUNDS.find((background) => background.id === appearance.backgroundId) || BACKGROUNDS[0];
   const backgroundStyle = selectedBackground.image
@@ -528,6 +547,33 @@ function App() {
         ...patch,
       },
     }));
+  }
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = themeMode;
+  }, [themeMode]);
+
+  function toggleEarlySleep() {
+    const currentlySleeping = Boolean(state.earlySleep?.isSleeping);
+    const now = new Date().toISOString();
+    setState((current) => {
+      const isSleeping = Boolean(current.earlySleep?.isSleeping);
+      return {
+        ...current,
+        earlySleep: {
+          ...(current.earlySleep || {}),
+          isSleeping: !isSleeping,
+          lastSleepAt: isSleeping ? current.earlySleep?.lastSleepAt || null : now,
+          lastWakeAt: isSleeping ? now : current.earlySleep?.lastWakeAt || null,
+        },
+        appearance: {
+          ...DEFAULT_APPEARANCE,
+          ...(current.appearance || {}),
+          themeMode: isSleeping ? "light" : "dark",
+        },
+      };
+    });
+    showRewardNotice(0, currentlySleeping ? "早安，已记录起床时间" : "晚安，已记录入睡时间");
   }
 
   async function handleLogin(event) {
@@ -1002,7 +1048,9 @@ function App() {
 
   return (
     <main
-      className={`app-shell ${selectedBackground.image ? "has-custom-bg" : ""}`}
+      className={`app-shell ${selectedBackground.image ? "has-custom-bg" : ""} ${
+        themeMode === "dark" ? "dark-mode" : "light-mode"
+      }`}
       style={backgroundStyle}
       onPointerMove={handleSpotlightMove}
     >
@@ -1055,6 +1103,7 @@ function App() {
         <TabButton icon={ListTodo} label="今日" active={activeView === "today"} onClick={() => setActiveView("today")} />
         <TabButton icon={Clock3} label="番茄钟" active={activeView === "timer"} onClick={() => setActiveView("timer")} />
         <TabButton icon={ShoppingBag} label="商店" active={activeView === "shop"} onClick={() => setActiveView("shop")} />
+        <TabButton icon={Moon} label="早睡" active={activeView === "earlysleep"} onClick={() => setActiveView("earlysleep")} />
         <TabButton icon={BarChart3} label="统计" active={activeView === "stats"} onClick={() => setActiveView("stats")} />
         <TabButton icon={History} label="历史" active={activeView === "history"} onClick={() => setActiveView("history")} />
         <TabButton icon={UserCog} label="账号" active={activeView === "account"} onClick={() => setActiveView("account")} />
@@ -1428,6 +1477,10 @@ function App() {
           refreshAdminUsers={refreshAdminUsers}
         />
       )}
+
+      {activeView === "earlysleep" && (
+        <EarlySleepPanel sleepState={state.earlySleep} themeMode={themeMode} onToggle={toggleEarlySleep} />
+      )}
     </main>
   );
 }
@@ -1500,6 +1553,147 @@ function TabButton({ icon: Icon, label, active, onClick }) {
       <Icon size={18} />
       <span>{label}</span>
     </button>
+  );
+}
+
+function EarlySleepPanel({ sleepState, themeMode, onToggle }) {
+  const [pullDistance, setPullDistance] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const pointerIdRef = useRef(null);
+  const startYRef = useRef(0);
+  const pullDistanceRef = useRef(0);
+  const springRafRef = useRef(null);
+  const maxPull = 150;
+  const triggerThreshold = 92;
+  const isSleeping = Boolean(sleepState?.isSleeping);
+
+  useEffect(() => {
+    return () => window.cancelAnimationFrame(springRafRef.current);
+  }, []);
+
+  function formatStamp(stamp) {
+    if (!stamp) return "未记录";
+    return new Date(stamp).toLocaleString("zh-CN", { hour12: false });
+  }
+
+  function withResistance(distance) {
+    const safe = Math.max(0, distance);
+    if (safe <= 64) return safe;
+    return 64 + (safe - 64) * 0.42;
+  }
+
+  function animateBackToRest() {
+    window.cancelAnimationFrame(springRafRef.current);
+    let velocity = 0;
+    const stiffness = 0.16;
+    const damping = 0.78;
+
+    const tick = () => {
+      const force = -pullDistanceRef.current * stiffness;
+      velocity = (velocity + force) * damping;
+      const next = Math.max(0, pullDistanceRef.current + velocity);
+      pullDistanceRef.current = next;
+      setPullDistance(next);
+      setArmed(next >= triggerThreshold);
+      if (next < 0.5 && Math.abs(velocity) < 0.5) {
+        pullDistanceRef.current = 0;
+        setPullDistance(0);
+        setArmed(false);
+        return;
+      }
+      springRafRef.current = window.requestAnimationFrame(tick);
+    };
+    springRafRef.current = window.requestAnimationFrame(tick);
+  }
+
+  function handlePointerDown(event) {
+    window.cancelAnimationFrame(springRafRef.current);
+    pointerIdRef.current = event.pointerId;
+    startYRef.current = event.clientY;
+    setDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handlePointerMove(event) {
+    if (!dragging || pointerIdRef.current !== event.pointerId) return;
+    const rawDistance = event.clientY - startYRef.current;
+    const next = Math.min(maxPull, withResistance(rawDistance));
+    pullDistanceRef.current = next;
+    setPullDistance(next);
+    setArmed(next >= triggerThreshold);
+  }
+
+  function handlePointerEnd(event) {
+    if (pointerIdRef.current !== event.pointerId) return;
+    const shouldToggle = pullDistanceRef.current >= triggerThreshold;
+    setDragging(false);
+    setArmed(false);
+    pointerIdRef.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    animateBackToRest();
+    if (shouldToggle) onToggle();
+  }
+
+  return (
+    <section className="earlysleep-layout">
+      <section className="panel glass earlysleep-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">EarlySleep</p>
+            <h2>{isSleeping ? "睡眠模式中" : "清醒模式中"}</h2>
+          </div>
+          <div className={`earlysleep-state ${isSleeping ? "sleeping" : "awake"}`}>
+            {isSleeping ? <Moon size={18} /> : <Sun size={18} />}
+            <span>{isSleeping ? "已入睡" : "已起床"}</span>
+          </div>
+        </div>
+
+        <div
+          className={`pull-cord-stage ${dragging ? "dragging" : ""} ${armed ? "armed" : ""} ${
+            isSleeping ? "sleeping" : "awake"
+          }`}
+          style={{
+            "--pull-distance": `${pullDistance}px`,
+            "--pull-progress": Math.min(1, pullDistance / triggerThreshold),
+          }}
+        >
+          <div className="pull-cord-anchor" aria-hidden="true" />
+          <div className="pull-cord-line" aria-hidden="true" />
+          <button
+            type="button"
+            className="pull-cord-knob"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+            aria-label={isSleeping ? "拖拽拉绳记录起床" : "拖拽拉绳记录入睡"}
+          >
+            <span />
+          </button>
+          <div className="pull-cord-target">{isSleeping ? "继续下拉起床" : "继续下拉入睡"}</div>
+        </div>
+
+        <div className="earlysleep-hint">
+          下拉圆环超过阈值并松手即可打卡，支持阻尼拉动和弹簧回弹。
+        </div>
+
+        <div className="earlysleep-records">
+          <p>
+            <strong>最近入睡：</strong>
+            {formatStamp(sleepState?.lastSleepAt)}
+          </p>
+          <p>
+            <strong>最近起床：</strong>
+            {formatStamp(sleepState?.lastWakeAt)}
+          </p>
+          <p>
+            <strong>当前主题：</strong>
+            {themeMode === "dark" ? "暗黑夜间" : "明亮日间"}
+          </p>
+        </div>
+      </section>
+    </section>
   );
 }
 
