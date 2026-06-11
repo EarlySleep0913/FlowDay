@@ -47,8 +47,8 @@ body {
   background-size: 120% 120%;
   animation: backgroundDrift 20s ease-in-out infinite alternate;
   transition:
-    background 800ms ease,
-    color 800ms ease;
+    background 1200ms ease,
+    color 1200ms ease;
 }
 
 body[data-theme="dark"] {
@@ -82,8 +82,8 @@ button {
   user-select: none;
   color: #16313a;
   transition:
-    color 800ms ease,
-    background-color 800ms ease;
+    color 1200ms ease,
+    background-color 1200ms ease;
 }
 
 .app-shell input,
@@ -129,20 +129,27 @@ button {
 
 .theme-wash {
   position: fixed;
-  inset: 0;
+  left: 50%;
+  top: 50%;
   z-index: 30;
+  width: 170vmax;
+  height: 170vmax;
+  border-radius: 50%;
   pointer-events: none;
   opacity: 0;
+  contain: paint;
+  transform: translate3d(-50%, -50%, 0) scale(0.08);
+  will-change: opacity, transform;
 }
 
 .theme-wash.dark {
   background: radial-gradient(circle at 50% 45%, rgba(42, 205, 190, 0.16), rgba(4, 14, 20, 0.82) 72%);
-  animation: sleepWash 900ms ease both;
+  animation: sleepWash 1350ms ease both;
 }
 
 .theme-wash.light {
   background: radial-gradient(circle at 50% 45%, rgba(255, 245, 207, 0.58), rgba(220, 250, 244, 0.2) 68%);
-  animation: wakeWash 760ms ease both;
+  animation: wakeWash 1150ms ease both;
 }
 
 .has-custom-bg::before {
@@ -196,11 +203,11 @@ button {
   box-shadow: 0 24px 80px rgba(42, 91, 101, 0.14);
   backdrop-filter: blur(22px);
   transition:
-    background 800ms ease,
-    border-color 800ms ease,
-    color 800ms ease,
-    box-shadow 800ms ease,
-    filter 800ms ease;
+    background 1200ms ease,
+    border-color 1200ms ease,
+    color 1200ms ease,
+    box-shadow 1200ms ease,
+    filter 1200ms ease;
 }
 
 .app-shell[data-theme="dark"] {
@@ -2825,32 +2832,32 @@ input[type="range"] {
 @keyframes sleepWash {
   0% {
     opacity: 0;
-    clip-path: circle(0% at 50% 48%);
+    transform: translate3d(-50%, -50%, 0) scale(0.08);
   }
 
   42% {
-    opacity: 0.92;
+    opacity: 0.74;
   }
 
   100% {
     opacity: 0;
-    clip-path: circle(140% at 50% 48%);
+    transform: translate3d(-50%, -50%, 0) scale(1);
   }
 }
 
 @keyframes wakeWash {
   0% {
     opacity: 0;
-    clip-path: circle(0% at 50% 48%);
+    transform: translate3d(-50%, -50%, 0) scale(0.08);
   }
 
   38% {
-    opacity: 0.78;
+    opacity: 0.62;
   }
 
   100% {
     opacity: 0;
-    clip-path: circle(140% at 50% 48%);
+    transform: translate3d(-50%, -50%, 0) scale(1);
   }
 }
 
@@ -3403,6 +3410,26 @@ input[type="range"] {
 }
 
 @media (max-width: 640px) {
+  body,
+  .app-shell {
+    transition-duration: 900ms;
+  }
+
+  .glass {
+    transition:
+      border-color 520ms ease,
+      color 520ms ease,
+      box-shadow 520ms ease;
+  }
+
+  .theme-wash.dark {
+    animation-duration: 1050ms;
+  }
+
+  .theme-wash.light {
+    animation-duration: 900ms;
+  }
+
   .app-shell {
     padding: 12px;
   }

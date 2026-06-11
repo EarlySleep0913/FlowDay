@@ -431,6 +431,8 @@ function App() {
   });
   const [rewardNotice, setRewardNotice] = useState(null);
   const [backgroundPanelOpen, setBackgroundPanelOpen] = useState(false);
+  const [themeWash, setThemeWash] = useState(null);
+  const previousThemeRef = useRef(null);
   const syncTimerRef = useRef(null);
 
   useEffect(() => {
@@ -573,6 +575,18 @@ function App() {
     return () => {
       delete document.body.dataset.theme;
     };
+  }, [themeMode]);
+
+  useEffect(() => {
+    if (previousThemeRef.current === null) {
+      previousThemeRef.current = themeMode;
+      return undefined;
+    }
+    if (previousThemeRef.current === themeMode) return undefined;
+    previousThemeRef.current = themeMode;
+    setThemeWash(themeMode);
+    const timerId = window.setTimeout(() => setThemeWash(null), 1400);
+    return () => window.clearTimeout(timerId);
   }, [themeMode]);
 
   function showRewardNotice(amount, reason) {
@@ -1122,7 +1136,7 @@ function App() {
       onPointerMove={handleSpotlightMove}
     >
       {selectedBackground.image && <div className="app-background" aria-hidden="true" />}
-      <div className={`theme-wash ${themeMode}`} key={themeMode} aria-hidden="true" />
+      {themeWash && <div className={`theme-wash ${themeWash}`} key={themeWash} aria-hidden="true" />}
       <ClickSpark />
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
@@ -1672,7 +1686,7 @@ function EarlySleepPage({ sleepLog, sleepStats, toggleSleepCheckIn }) {
           <p>
             {sleeping
               ? "睡眠模式已开启。等你醒来时，这一段安静的时间会被写进记录。"
-              : "按下按钮，记录入睡时间，FlowDay 会和你一起把界面调暗。"}
+              : "按下按钮，记录入睡时间。"}
           </p>
           <div className="sleep-status-row">
             <Metric icon={sleeping ? Moon : Sunrise} label="当前状态" value={sleeping ? "睡眠中" : "清醒中"} />
