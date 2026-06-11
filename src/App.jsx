@@ -10,6 +10,7 @@ import {
   Cloud,
   Coins,
   Crown,
+  BedDouble,
   Download,
   Flame,
   Gamepad2,
@@ -21,6 +22,7 @@ import {
   LogIn,
   LogOut,
   LockKeyhole,
+  Moon,
   Pause,
   Play,
   Plus,
@@ -35,6 +37,7 @@ import {
   Sparkles,
   Square,
   Star,
+  Sunrise,
   Target,
   TimerReset,
   Trophy,
@@ -58,6 +61,14 @@ const AVATAR_EFFECT_TYPES = ["standee", "pulse", "hop", "sparkle", "shake"];
 const DEFAULT_APPEARANCE = {
   backgroundId: "theme",
   backgroundBlur: 8,
+  themeMode: "light",
+};
+const DEFAULT_SLEEP_LOG = {
+  status: "awake",
+  activeSleepAt: null,
+  lastSleepAt: null,
+  lastWakeAt: null,
+  sessions: [],
 };
 const BACKGROUNDS = [
   { id: "theme", name: "主题", image: null },
@@ -138,6 +149,24 @@ function formatMinutes(seconds) {
   return rest ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
 }
 
+function formatClockTime(value) {
+  if (!value) return "尚未记录";
+  return new Date(value).toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return "尚未记录";
+  return new Date(value).toLocaleString("zh-CN", {
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getFocusCoinReward(seconds) {
   if (seconds < 60) return 0;
   return Math.max(2, Math.floor(seconds / FOCUS_COIN_UNIT_SECONDS) * FOCUS_COIN_REWARD);
@@ -216,6 +245,7 @@ function emptyState() {
       equippedSkinId: DEFAULT_SKIN_ID,
     },
     appearance: DEFAULT_APPEARANCE,
+    sleepLog: DEFAULT_SLEEP_LOG,
   };
 }
 
@@ -238,6 +268,13 @@ function normalizeState(rawState) {
     30,
     Math.max(0, Number(rawAppearance.backgroundBlur ?? DEFAULT_APPEARANCE.backgroundBlur) || 0)
   );
+  const themeMode = rawAppearance.themeMode === "dark" ? "dark" : "light";
+  const rawSleepLog = raw.sleepLog && typeof raw.sleepLog === "object" ? raw.sleepLog : {};
+  const sleepSessions = Array.isArray(rawSleepLog.sessions)
+    ? rawSleepLog.sessions.filter((session) => session?.sleepAt && session?.wakeAt)
+    : [];
+  const sleepStatus =
+    rawSleepLog.status === "sleeping" && rawSleepLog.activeSleepAt ? "sleeping" : "awake";
 
   return {
     ...base,
@@ -262,6 +299,14 @@ function normalizeState(rawState) {
     appearance: {
       backgroundId,
       backgroundBlur,
+      themeMode: sleepStatus === "sleeping" ? "dark" : themeMode,
+    },
+    sleepLog: {
+      ...DEFAULT_SLEEP_LOG,
+      ...rawSleepLog,
+      status: sleepStatus,
+      activeSleepAt: sleepStatus === "sleeping" ? rawSleepLog.activeSleepAt : null,
+      sessions: sleepSessions,
     },
   };
 }
@@ -461,6 +506,15 @@ function App() {
     }
   }, [timer.running, timer.startedAt, timer.elapsed, timer.remaining]);
 
+  useEffect(() => {
+    if (!currentUser || !cloudReady) return undefined;
+    function handleFocusSync() {
+      loadCloudState("focus");
+    }
+    window.addEventListener("focus", handleFocusSync);
+    return () => window.removeEventListener("focus", handleFocusSync);
+  }, [currentUser?.id, cloudReady]);
+
   const tasksForDate = useMemo(
     () => state.tasks.filter((task) => task.date === selectedDate),
     [state.tasks, selectedDate]
@@ -502,6 +556,9 @@ function App() {
   const equippedSkin = getSkin(state.inventory?.equippedSkinId);
   const ownedSkinIds = state.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
   const appearance = { ...DEFAULT_APPEARANCE, ...(state.appearance || {}) };
+  const themeMode = appearance.themeMode === "dark" ? "dark" : "light";
+  const sleepLog = { ...DEFAULT_SLEEP_LOG, ...(state.sleepLog || {}) };
+  const sleepStats = useMemo(() => buildSleepStats(sleepLog), [sleepLog]);
   const selectedBackground =
     BACKGROUNDS.find((background) => background.id === appearance.backgroundId) || BACKGROUNDS[0];
   const backgroundStyle = selectedBackground.image
@@ -510,6 +567,13 @@ function App() {
         "--custom-bg-blur": `${appearance.backgroundBlur}px`,
       }
     : undefined;
+
+  useEffect(() => {
+    document.body.dataset.theme = themeMode;
+    return () => {
+      delete document.body.dataset.theme;
+    };
+  }, [themeMode]);
 
   function showRewardNotice(amount, reason) {
     const id = uid();
@@ -528,6 +592,56 @@ function App() {
         ...patch,
       },
     }));
+  }
+
+  function toggleSleepCheckIn() {
+    const now = new Date();
+    const nowIso = now.toISOString();
+    setState((current) => {
+      const currentSleepLog = { ...DEFAULT_SLEEP_LOG, ...(current.sleepLog || {}) };
+      const sleeping = currentSleepLog.status === "sleeping" && currentSleepLog.activeSleepAt;
+      if (sleeping) {
+        const sleepAt = currentSleepLog.activeSleepAt;
+        const durationSeconds = Math.max(0, Math.floor((now.getTime() - new Date(sleepAt).getTime()) / 1000));
+        const session = {
+          id: uid(),
+          sleepAt,
+          wakeAt: nowIso,
+          durationSeconds,
+          dateKey: toDateKey(new Date(sleepAt)),
+        };
+        return {
+          ...current,
+          appearance: {
+            ...DEFAULT_APPEARANCE,
+            ...(current.appearance || {}),
+            themeMode: "light",
+          },
+          sleepLog: {
+            ...currentSleepLog,
+            status: "awake",
+            activeSleepAt: null,
+            lastWakeAt: nowIso,
+            sessions: [session, ...(currentSleepLog.sessions || [])],
+          },
+        };
+      }
+      return {
+        ...current,
+        appearance: {
+          ...DEFAULT_APPEARANCE,
+          ...(current.appearance || {}),
+          themeMode: "dark",
+        },
+        sleepLog: {
+          ...currentSleepLog,
+          status: "sleeping",
+          activeSleepAt: nowIso,
+          lastSleepAt: nowIso,
+        },
+      };
+    });
+    showRewardNotice(0, sleepLog.status === "sleeping" ? "起床打卡完成" : "已进入睡眠模式");
   }
 
   async function handleLogin(event) {
@@ -1003,10 +1117,12 @@ function App() {
   return (
     <main
       className={`app-shell ${selectedBackground.image ? "has-custom-bg" : ""}`}
+      data-theme={themeMode}
       style={backgroundStyle}
       onPointerMove={handleSpotlightMove}
     >
       {selectedBackground.image && <div className="app-background" aria-hidden="true" />}
+      <div className={`theme-wash ${themeMode}`} key={themeMode} aria-hidden="true" />
       <ClickSpark />
       <div className="ambient ambient-one" />
       <div className="ambient ambient-two" />
@@ -1054,6 +1170,7 @@ function App() {
         <TabButton icon={Gamepad2} label="主页" active={activeView === "home"} onClick={() => setActiveView("home")} />
         <TabButton icon={ListTodo} label="今日" active={activeView === "today"} onClick={() => setActiveView("today")} />
         <TabButton icon={Clock3} label="番茄钟" active={activeView === "timer"} onClick={() => setActiveView("timer")} />
+        <TabButton icon={BedDouble} label="EarlySleep" active={activeView === "earlysleep"} onClick={() => setActiveView("earlysleep")} />
         <TabButton icon={ShoppingBag} label="商店" active={activeView === "shop"} onClick={() => setActiveView("shop")} />
         <TabButton icon={BarChart3} label="统计" active={activeView === "stats"} onClick={() => setActiveView("stats")} />
         <TabButton icon={History} label="历史" active={activeView === "history"} onClick={() => setActiveView("history")} />
@@ -1333,6 +1450,14 @@ function App() {
         </section>
       )}
 
+      {activeView === "earlysleep" && (
+        <EarlySleepPage
+          sleepLog={sleepLog}
+          sleepStats={sleepStats}
+          toggleSleepCheckIn={toggleSleepCheckIn}
+        />
+      )}
+
       {activeView === "shop" && (
         <SkinShop
           coins={state.wallet?.coins || 0}
@@ -1428,6 +1553,13 @@ function App() {
           refreshAdminUsers={refreshAdminUsers}
         />
       )}
+
+      <footer className="app-credit">
+        <span>design by 早点学会按时睡觉</span>
+        <a href="https://github.com/EarlySleep0913" target="_blank" rel="noreferrer">
+          github.com/EarlySleep0913
+        </a>
+      </footer>
     </main>
   );
 }
@@ -1515,6 +1647,116 @@ function Metric({ icon: Icon, label, value }) {
 
 function EmptyState({ text }) {
   return <p className="empty-state">{text}</p>;
+}
+
+function EarlySleepPage({ sleepLog, sleepStats, toggleSleepCheckIn }) {
+  const [nowTick, setNowTick] = useState(Date.now());
+  const sleeping = sleepLog.status === "sleeping" && sleepLog.activeSleepAt;
+
+  useEffect(() => {
+    if (!sleeping) return undefined;
+    const interval = window.setInterval(() => setNowTick(Date.now()), 30000);
+    return () => window.clearInterval(interval);
+  }, [sleeping]);
+
+  const activeSeconds = sleeping
+    ? Math.max(0, Math.floor((nowTick - new Date(sleepLog.activeSleepAt).getTime()) / 1000))
+    : 0;
+
+  return (
+    <section className="earlysleep-layout">
+      <section className="earlysleep-hero glass">
+        <div className="sleep-copy">
+          <p className="hub-mark">EarlySleep</p>
+          <h2>{sleeping ? "月亮已经接管今晚" : "把今天轻轻收好"}</h2>
+          <p>
+            {sleeping
+              ? "睡眠模式已开启。等你醒来时，这一段安静的时间会被写进记录。"
+              : "按下按钮，记录入睡时间，FlowDay 会和你一起把界面调暗。"}
+          </p>
+          <div className="sleep-status-row">
+            <Metric icon={sleeping ? Moon : Sunrise} label="当前状态" value={sleeping ? "睡眠中" : "清醒中"} />
+            <Metric icon={Moon} label="上次入睡" value={formatDateTime(sleepLog.lastSleepAt)} />
+            <Metric icon={Sunrise} label="上次起床" value={formatDateTime(sleepLog.lastWakeAt)} />
+          </div>
+        </div>
+
+        <div className="sleep-orbit">
+          <button
+            className={`sleep-check-button ${sleeping ? "sleeping" : "awake"}`}
+            onClick={toggleSleepCheckIn}
+            type="button"
+          >
+            <span className="sleep-button-icon">{sleeping ? <Sunrise size={38} /> : <Moon size={38} />}</span>
+            <strong>{sleeping ? "起床" : "睡觉"}</strong>
+            <small>{sleeping ? `已睡 ${formatMinutes(activeSeconds)}` : "开始记录今晚"}</small>
+          </button>
+          <div className="sleep-ring sleep-ring-one" />
+          <div className="sleep-ring sleep-ring-two" />
+        </div>
+      </section>
+
+      <section className="sleep-stats-grid">
+        <article className="panel glass sleep-stat-card">
+          <p className="eyebrow">7 DAY SLEEP</p>
+          <h2>最近 7 天</h2>
+          <SleepTimeline data={sleepStats.recentDays} />
+        </article>
+
+        <article className="panel glass sleep-stat-card">
+          <p className="eyebrow">SLEEP SCORE</p>
+          <div className="sleep-score">{sleepStats.score}</div>
+          <p className="muted">按最近睡眠时长估算，8 小时附近会更高。</p>
+        </article>
+
+        <article className="panel glass sleep-stat-card">
+          <p className="eyebrow">AVERAGE</p>
+          <div className="sleep-metrics-list">
+            <span>
+              <strong>{formatMinutes(sleepStats.averageSeconds)}</strong>
+              平均睡眠
+            </span>
+            <span>
+              <strong>{sleepStats.averageSleepTime}</strong>
+              平均入睡
+            </span>
+            <span>
+              <strong>{sleepStats.averageWakeTime}</strong>
+              平均起床
+            </span>
+          </div>
+        </article>
+
+        <article className="panel glass sleep-stat-card">
+          <p className="eyebrow">STREAK</p>
+          <div className="sleep-score">{sleepStats.earlyStreak}</div>
+          <p className="muted">连续 23:30 前入睡天数</p>
+        </article>
+      </section>
+
+      <section className="panel glass sleep-history-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">SLEEP LOG</p>
+            <h2>睡眠记录</h2>
+          </div>
+        </div>
+        {sleepStats.sessions.length === 0 ? (
+          <EmptyState text="还没有完整的睡眠记录。" />
+        ) : (
+          <div className="sleep-history-list">
+            {sleepStats.sessions.slice(0, 8).map((session) => (
+              <article className="sleep-history-item" key={session.id}>
+                <span>{formatDate(session.dateKey)}</span>
+                <strong>{formatMinutes(session.durationSeconds)}</strong>
+                <span>{formatClockTime(session.sleepAt)} - {formatClockTime(session.wakeAt)}</span>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </section>
+  );
 }
 
 function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, setActiveView }) {
@@ -1908,6 +2150,68 @@ function buildStats(sessions, start, end) {
   };
 }
 
+function buildSleepStats(sleepLog) {
+  const sessions = [...(sleepLog.sessions || [])]
+    .filter((session) => session.sleepAt && session.wakeAt)
+    .map((session) => ({
+      ...session,
+      durationSeconds:
+        Number(session.durationSeconds) ||
+        Math.max(0, Math.floor((new Date(session.wakeAt).getTime() - new Date(session.sleepAt).getTime()) / 1000)),
+      dateKey: session.dateKey || toDateKey(new Date(session.sleepAt)),
+    }))
+    .sort((a, b) => new Date(b.wakeAt).getTime() - new Date(a.wakeAt).getTime());
+  const totalSeconds = sessions.reduce((sum, session) => sum + session.durationSeconds, 0);
+  const averageSeconds = sessions.length ? Math.round(totalSeconds / sessions.length) : 0;
+  const recentMap = new Map();
+  sessions.forEach((session) => {
+    recentMap.set(session.dateKey, (recentMap.get(session.dateKey) || 0) + session.durationSeconds);
+  });
+  const recentDays = fillDateRange(shiftDate(todayKey(), -6), todayKey(), recentMap);
+  const averageSleepTime = averageTimeOfDay(sessions.map((session) => session.sleepAt), true);
+  const averageWakeTime = averageTimeOfDay(sessions.map((session) => session.wakeAt));
+  const score = Math.round(Math.min(100, (averageSeconds / (8 * 3600)) * 100)) || 0;
+  const earlyStreak = getEarlySleepStreak(sessions);
+
+  return {
+    sessions,
+    recentDays,
+    averageSeconds,
+    averageSleepTime,
+    averageWakeTime,
+    score,
+    earlyStreak,
+  };
+}
+
+function averageTimeOfDay(values, treatAfterMidnightAsLateNight = false) {
+  const minutes = values
+    .map((value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return null;
+      const total = date.getHours() * 60 + date.getMinutes();
+      return treatAfterMidnightAsLateNight && total < 12 * 60 ? total + 24 * 60 : total;
+    })
+    .filter((value) => value !== null);
+  if (!minutes.length) return "尚未记录";
+  const average = Math.round(minutes.reduce((sum, value) => sum + value, 0) / minutes.length) % (24 * 60);
+  return `${pad(Math.floor(average / 60) % 24)}:${pad(average % 60)}`;
+}
+
+function getEarlySleepStreak(sessions) {
+  let streak = 0;
+  for (const session of sessions) {
+    const sleepAt = new Date(session.sleepAt);
+    const minutes = sleepAt.getHours() * 60 + sleepAt.getMinutes();
+    if (minutes <= 23 * 60 + 30) {
+      streak += 1;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
 function fillDateRange(start, end, map) {
   const result = [];
   let cursor = start;
@@ -1987,6 +2291,23 @@ function Timeline({ data }) {
         <div className="day-column" key={item.label}>
           <div className="day-bar" style={{ height: `${Math.max(4, (item.seconds / max) * 100)}%` }} />
           <span>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SleepTimeline({ data }) {
+  const max = Math.max(1, ...data.map((item) => item.seconds));
+  return (
+    <div className="sleep-timeline">
+      {data.map((item) => (
+        <div className="sleep-day" key={item.label}>
+          <div className="sleep-day-bar">
+            <span style={{ height: `${Math.max(8, (item.seconds / max) * 100)}%` }} />
+          </div>
+          <strong>{item.seconds ? formatMinutes(item.seconds) : "0 分钟"}</strong>
+          <small>{item.label}</small>
         </div>
       ))}
     </div>
