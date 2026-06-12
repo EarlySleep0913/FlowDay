@@ -46,7 +46,16 @@ import {
   Users,
   Zap,
 } from "lucide-react";
-import { DEFAULT_SKIN_ID, getSkin, rarityMeta, skins } from "./skins";
+import {
+  DEFAULT_FEMALE_SKIN_ID,
+  DEFAULT_MALE_SKIN_ID,
+  DEFAULT_SKIN_ID,
+  SKIN_GENDERS,
+  getSkin,
+  getSkinsByGender,
+  rarityMeta,
+  skins,
+} from "./skins";
 
 const STORAGE_KEY = "flowday-state-v1";
 const todayKey = () => toDateKey(new Date());
@@ -71,6 +80,7 @@ const DEFAULT_SLEEP_LOG = {
   lastWakeAt: null,
   sessions: [],
 };
+const DEFAULT_SKIN_GENDER = "female";
 const DEFAULT_TIMER_STATE = {
   running: false,
   paused: false,
@@ -301,6 +311,7 @@ function emptyState() {
     inventory: {
       ownedSkinIds: [DEFAULT_SKIN_ID],
       equippedSkinId: DEFAULT_SKIN_ID,
+      skinGender: DEFAULT_SKIN_GENDER,
     },
     appearance: DEFAULT_APPEARANCE,
     sleepLog: DEFAULT_SLEEP_LOG,
@@ -311,12 +322,22 @@ function normalizeState(rawState) {
   const base = emptyState();
   const raw = rawState && typeof rawState === "object" ? rawState : {};
   const validSkinIds = new Set(skins.map((skin) => skin.id));
+  const skinGender = raw.inventory?.skinGender === "male" ? "male" : DEFAULT_SKIN_GENDER;
+  const genderDefaultSkinId =
+    SKIN_GENDERS[skinGender]?.defaultSkinId || DEFAULT_FEMALE_SKIN_ID;
   const ownedSkinIds = [
-    ...new Set([DEFAULT_SKIN_ID, ...(raw.inventory?.ownedSkinIds || raw.ownedSkins || [])]),
+    ...new Set([
+      DEFAULT_FEMALE_SKIN_ID,
+      DEFAULT_MALE_SKIN_ID,
+      genderDefaultSkinId,
+      ...(raw.inventory?.ownedSkinIds || raw.ownedSkins || []),
+    ]),
   ].filter((skinId) => validSkinIds.has(skinId));
-  const equippedSkinId = ownedSkinIds.includes(raw.inventory?.equippedSkinId)
+  const rawEquippedSkin = getSkin(raw.inventory?.equippedSkinId);
+  const equippedSkinId =
+    ownedSkinIds.includes(raw.inventory?.equippedSkinId) && rawEquippedSkin.gender === skinGender
     ? raw.inventory.equippedSkinId
-    : DEFAULT_SKIN_ID;
+    : genderDefaultSkinId;
   const backgroundIds = new Set(BACKGROUNDS.map((background) => background.id));
   const rawAppearance = raw.appearance && typeof raw.appearance === "object" ? raw.appearance : {};
   const backgroundId = backgroundIds.has(rawAppearance.backgroundId)
@@ -367,6 +388,7 @@ function normalizeState(rawState) {
     inventory: {
       ownedSkinIds,
       equippedSkinId,
+      skinGender,
     },
     appearance: {
       backgroundId,
@@ -628,8 +650,12 @@ function App() {
   }, [state.sessions, queryTitle]);
 
   const gameStats = useMemo(() => buildGameStats(state, todayKey()), [state]);
+  const skinGender = state.inventory?.skinGender === "male" ? "male" : DEFAULT_SKIN_GENDER;
+  const currentSkins = useMemo(() => getSkinsByGender(skinGender), [skinGender]);
+  const currentSkinIds = useMemo(() => new Set(currentSkins.map((skin) => skin.id)), [currentSkins]);
   const equippedSkin = getSkin(state.inventory?.equippedSkinId);
   const ownedSkinIds = state.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+  const visibleOwnedSkinIds = ownedSkinIds.filter((skinId) => currentSkinIds.has(skinId));
   const appearance = { ...DEFAULT_APPEARANCE, ...(state.appearance || {}) };
   const themeMode = appearance.themeMode === "dark" ? "dark" : "light";
   const sleepLog = { ...DEFAULT_SLEEP_LOG, ...(state.sleepLog || {}) };
@@ -1272,6 +1298,8 @@ function App() {
     const skin = getSkin(skinId);
     setState((current) => {
       const owned = current.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+      const currentGender = current.inventory?.skinGender === "male" ? "male" : DEFAULT_SKIN_GENDER;
+      if (skin.gender !== currentGender) return current;
       if (!owned.includes(skin.id)) return current;
       return {
         ...current,
@@ -1279,14 +1307,40 @@ function App() {
           ...current.inventory,
           ownedSkinIds: owned,
           equippedSkinId: skin.id,
+          skinGender: currentGender,
         },
       };
     });
     showRewardNotice(0, `已装备 ${skin.name}`);
   }
 
+  function changeSkinGender(nextGender) {
+    const safeGender = nextGender === "male" ? "male" : DEFAULT_SKIN_GENDER;
+    const defaultSkinId = SKIN_GENDERS[safeGender]?.defaultSkinId || DEFAULT_SKIN_ID;
+    setState((current) => {
+      const owned = [
+        ...new Set([defaultSkinId, ...(current.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID])]),
+      ];
+      const currentEquipped = getSkin(current.inventory?.equippedSkinId);
+      const equippedSkinId =
+        currentEquipped.gender === safeGender && owned.includes(currentEquipped.id)
+          ? currentEquipped.id
+          : defaultSkinId;
+      return {
+        ...current,
+        inventory: {
+          ...(current.inventory || {}),
+          ownedSkinIds: owned,
+          equippedSkinId,
+          skinGender: safeGender,
+        },
+      };
+    });
+  }
+
   function buySkin(skinId) {
     const skin = getSkin(skinId);
+    if (skin.gender !== skinGender) return;
     const owned = ownedSkinIds.includes(skin.id);
     if (owned) {
       equipSkin(skin.id);
@@ -1298,6 +1352,8 @@ function App() {
     }
     setState((current) => {
       const currentOwned = current.inventory?.ownedSkinIds || [DEFAULT_SKIN_ID];
+      const currentGender = current.inventory?.skinGender === "male" ? "male" : DEFAULT_SKIN_GENDER;
+      if (skin.gender !== currentGender) return current;
       if (currentOwned.includes(skin.id)) return current;
       return {
         ...current,
@@ -1310,6 +1366,7 @@ function App() {
           ...(current.inventory || {}),
           ownedSkinIds: [...currentOwned, skin.id],
           equippedSkinId: skin.id,
+          skinGender: currentGender,
         },
       };
     });
@@ -1394,8 +1451,11 @@ function App() {
           daily={state.daily[todayKey()] || { mood: 3, energy: 3, note: "", emoji: "🌤️" }}
           currentUser={currentUser}
           equippedSkin={equippedSkin}
+          skinGender={skinGender}
+          changeSkinGender={changeSkinGender}
           coins={state.wallet?.coins || 0}
-          ownedCount={ownedSkinIds.length}
+          ownedCount={visibleOwnedSkinIds.length}
+          skinCount={currentSkins.length}
           setActiveView={setActiveView}
         />
       )}
@@ -1695,6 +1755,8 @@ function App() {
           coins={state.wallet?.coins || 0}
           ownedSkinIds={ownedSkinIds}
           equippedSkinId={equippedSkin.id}
+          skinGender={skinGender}
+          currentSkins={currentSkins}
           buySkin={buySkin}
           equipSkin={equipSkin}
         />
@@ -2119,7 +2181,18 @@ function SleepHistoryItem({ session, updateSleepSession, deleteSleepSession }) {
   );
 }
 
-function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, setActiveView }) {
+function GameHome({
+  stats,
+  daily,
+  currentUser,
+  equippedSkin,
+  skinGender,
+  changeSkinGender,
+  coins,
+  ownedCount,
+  skinCount,
+  setActiveView,
+}) {
   const [avatarEffectKey, setAvatarEffectKey] = useState("");
   const [avatarEffectType, setAvatarEffectType] = useState("standee");
   const avatarEffectTimerRef = useRef(null);
@@ -2215,6 +2288,18 @@ function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, 
             <span>{equippedSkin.title}</span>
             <strong>{equippedSkin.name}</strong>
           </div>
+          <div className="skin-gender-switch" aria-label="角色性别切换">
+            {Object.entries(SKIN_GENDERS).map(([gender, meta]) => (
+              <button
+                className={skinGender === gender ? "active" : ""}
+                key={gender}
+                onClick={() => changeSkinGender(gender)}
+                type="button"
+              >
+                {meta.label}
+              </button>
+            ))}
+          </div>
           <div className="status-crystals">
             <span>
               <HeartPulse size={16} />
@@ -2230,7 +2315,7 @@ function GameHome({ stats, daily, currentUser, equippedSkin, coins, ownedCount, 
             </span>
             <span>
               <Shirt size={16} />
-              {ownedCount}/{skins.length} 皮肤
+              {ownedCount}/{skinCount} 皮肤
             </span>
           </div>
         </div>
@@ -2331,8 +2416,11 @@ function QuestCard({ icon: Icon, title, value, detail, progress, onClick }) {
   );
 }
 
-function SkinShop({ coins, ownedSkinIds, equippedSkinId, buySkin, equipSkin }) {
+function SkinShop({ coins, ownedSkinIds, equippedSkinId, skinGender, currentSkins, buySkin, equipSkin }) {
   const ownedSet = new Set(ownedSkinIds);
+  const visibleOwnedCount = ownedSkinIds.filter((skinId) =>
+    currentSkins.some((skin) => skin.id === skinId)
+  ).length;
   return (
     <section className="shop-layout">
       <section className="shop-hero glass">
@@ -2349,12 +2437,12 @@ function SkinShop({ coins, ownedSkinIds, equippedSkinId, buySkin, equipSkin }) {
         <div className="wallet-card">
           <Shirt size={24} />
           <span>已拥有</span>
-          <strong>{ownedSkinIds.length}/{skins.length}</strong>
+          <strong>{visibleOwnedCount}/{currentSkins.length}</strong>
         </div>
       </section>
 
       <section className="skin-grid">
-        {skins.map((skin) => {
+        {currentSkins.map((skin) => {
           const owned = ownedSet.has(skin.id);
           const equipped = equippedSkinId === skin.id;
           const canBuy = coins >= skin.price;

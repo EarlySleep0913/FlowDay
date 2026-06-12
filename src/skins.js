@@ -1,4 +1,11 @@
-export const DEFAULT_SKIN_ID = "teal-squire";
+export const DEFAULT_MALE_SKIN_ID = "teal-squire";
+export const DEFAULT_FEMALE_SKIN_ID = "girl-crystal-scholar";
+export const DEFAULT_SKIN_ID = DEFAULT_FEMALE_SKIN_ID;
+
+export const SKIN_GENDERS = {
+  female: { label: "女生", defaultSkinId: DEFAULT_FEMALE_SKIN_ID },
+  male: { label: "男生", defaultSkinId: DEFAULT_MALE_SKIN_ID },
+};
 
 export const rarityMeta = {
   common: { label: "普通", tone: "#37a092" },
@@ -8,7 +15,7 @@ export const rarityMeta = {
   legendary: { label: "传说", tone: "#d59a28" },
 };
 
-export const skins = [
+const maleSkinsBase = [
   {
     id: "teal-squire",
     name: "青岚见习者",
@@ -227,8 +234,236 @@ export const skins = [
   },
 ];
 
+const femaleSkinsBase = [
+  {
+    id: "girl-crystal-scholar",
+    name: "晶杖学徒",
+    title: "默认皮肤",
+    rarity: "common",
+    price: 0,
+    image: "/skins/girl-crystal-scholar.png",
+    accent: "#6eb7e8",
+  },
+  {
+    id: "girl-flower-oracle",
+    name: "花庭先知",
+    title: "春藤祈愿",
+    rarity: "uncommon",
+    price: 80,
+    image: "/skins/girl-flower-oracle.png",
+    accent: "#78ad62",
+  },
+  {
+    id: "girl-moon-priestess",
+    name: "月辉祭司",
+    title: "银月法典",
+    rarity: "rare",
+    price: 180,
+    image: "/skins/girl-moon-priestess.png",
+    accent: "#7caee6",
+  },
+  {
+    id: "girl-paladin-guard",
+    name: "白金守卫",
+    title: "圣盾契约",
+    rarity: "rare",
+    price: 220,
+    image: "/skins/girl-paladin-guard.png",
+    accent: "#d5ad4d",
+  },
+  {
+    id: "girl-sailor-muse",
+    name: "海风缪斯",
+    title: "蓝港日记",
+    rarity: "common",
+    price: 90,
+    image: "/skins/girl-sailor-muse.png",
+    accent: "#4b8fd4",
+  },
+  {
+    id: "girl-book-apprentice",
+    name: "书页学妹",
+    title: "晨课手札",
+    rarity: "uncommon",
+    price: 120,
+    image: "/skins/girl-book-apprentice.png",
+    accent: "#9a7040",
+  },
+  {
+    id: "girl-forest-ranger",
+    name: "林间弓手",
+    title: "叶影巡林",
+    rarity: "rare",
+    price: 260,
+    image: "/skins/girl-forest-ranger.png",
+    accent: "#5c9f54",
+  },
+  {
+    id: "girl-golden-bard",
+    name: "金弦吟游",
+    title: "竖琴诗章",
+    rarity: "epic",
+    price: 420,
+    image: "/skins/girl-golden-bard.png",
+    accent: "#d7a84f",
+  },
+  {
+    id: "girl-winter-cloak",
+    name: "霜雪披风",
+    title: "冬夜守望",
+    rarity: "rare",
+    price: 280,
+    image: "/skins/girl-winter-cloak.png",
+    accent: "#7fbbe8",
+  },
+  {
+    id: "girl-potion-alchemist",
+    name: "药瓶炼金师",
+    title: "绿瓶秘方",
+    rarity: "rare",
+    price: 300,
+    image: "/skins/girl-potion-alchemist.png",
+    accent: "#6aa56a",
+  },
+  {
+    id: "girl-star-witch",
+    name: "星帽女巫",
+    title: "夜幕星尘",
+    rarity: "epic",
+    price: 480,
+    image: "/skins/girl-star-witch.png",
+    accent: "#5964c6",
+  },
+  {
+    id: "girl-shadow-rogue",
+    name: "影刃游侠",
+    title: "黑夜潜行",
+    rarity: "epic",
+    price: 520,
+    image: "/skins/girl-shadow-rogue.png",
+    accent: "#3d3936",
+  },
+  {
+    id: "girl-cloud-mage",
+    name: "云朵魔法师",
+    title: "晴空法杖",
+    rarity: "uncommon",
+    price: 140,
+    image: "/skins/girl-cloud-mage.png",
+    accent: "#7ebde8",
+  },
+  {
+    id: "girl-lantern-traveler",
+    name: "提灯旅人",
+    title: "暖夜向导",
+    rarity: "uncommon",
+    price: 150,
+    image: "/skins/girl-lantern-traveler.png",
+    accent: "#c89442",
+  },
+  {
+    id: "girl-rose-archer",
+    name: "蔷薇弓手",
+    title: "粉羽箭袋",
+    rarity: "rare",
+    price: 320,
+    image: "/skins/girl-rose-archer.png",
+    accent: "#d489a0",
+  },
+  {
+    id: "girl-dream-keeper",
+    name: "梦境守夜人",
+    title: "星被晚安",
+    rarity: "epic",
+    price: 560,
+    image: "/skins/girl-dream-keeper.png",
+    accent: "#7164c9",
+  },
+  {
+    id: "girl-ice-sage",
+    name: "冰晶贤者",
+    title: "寒光咏唱",
+    rarity: "epic",
+    price: 580,
+    image: "/skins/girl-ice-sage.png",
+    accent: "#6db4e9",
+  },
+  {
+    id: "girl-spring-scout",
+    name: "春野侦察员",
+    title: "花帽地图",
+    rarity: "rare",
+    price: 340,
+    image: "/skins/girl-spring-scout.png",
+    accent: "#80a74d",
+  },
+  {
+    id: "girl-rain-wanderer",
+    name: "雨伞漫游者",
+    title: "蓝雨小径",
+    rarity: "rare",
+    price: 360,
+    image: "/skins/girl-rain-wanderer.png",
+    accent: "#6fa9d8",
+  },
+  {
+    id: "girl-royal-knight",
+    name: "皇家骑士",
+    title: "白金誓约",
+    rarity: "legendary",
+    price: 780,
+    image: "/skins/girl-royal-knight.png",
+    accent: "#d4a94e",
+  },
+  {
+    id: "girl-ocean-dancer",
+    name: "海梦舞者",
+    title: "潮汐花裙",
+    rarity: "epic",
+    price: 620,
+    image: "/skins/girl-ocean-dancer.png",
+    accent: "#6fbfd1",
+  },
+  {
+    id: "girl-adventure-guide",
+    name: "远行向导",
+    title: "望远镜地图",
+    rarity: "rare",
+    price: 380,
+    image: "/skins/girl-adventure-guide.png",
+    accent: "#8f7b3e",
+  },
+  {
+    id: "girl-navy-scholar",
+    name: "海军书士",
+    title: "蓝章记录",
+    rarity: "epic",
+    price: 600,
+    image: "/skins/girl-navy-scholar.png",
+    accent: "#355b9c",
+  },
+  {
+    id: "girl-silver-paladin",
+    name: "银白圣骑",
+    title: "终章盾徽",
+    rarity: "legendary",
+    price: 880,
+    image: "/skins/girl-silver-paladin.png",
+    accent: "#d2a14a",
+  },
+];
+
+export const skins = [
+  ...femaleSkinsBase.map((skin) => ({ ...skin, gender: "female" })),
+  ...maleSkinsBase.map((skin) => ({ ...skin, gender: "male" })),
+];
+
 export const skinMap = new Map(skins.map((skin) => [skin.id, skin]));
 
 export function getSkin(id) {
   return skinMap.get(id) || skinMap.get(DEFAULT_SKIN_ID);
+}
+
+export function getSkinsByGender(gender) {
+  return skins.filter((skin) => skin.gender === gender);
 }

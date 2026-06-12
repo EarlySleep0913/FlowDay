@@ -1378,6 +1378,47 @@ textarea:focus-visible {
   font-size: 1.12rem;
 }
 
+.skin-gender-switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.62),
+    0 14px 32px rgba(32, 91, 102, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.skin-gender-switch button {
+  min-width: 58px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  color: #496a70;
+  background: transparent;
+  font-weight: 900;
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.skin-gender-switch button:hover {
+  transform: translateY(-1px);
+  color: #173d46;
+}
+
+.skin-gender-switch button.active {
+  color: #153c44;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(130, 216, 204, 0.42));
+  box-shadow: 0 8px 18px rgba(47, 134, 140, 0.16);
+}
+
 .status-crystals {
   display: flex;
   flex-wrap: wrap;
